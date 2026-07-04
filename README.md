@@ -46,6 +46,13 @@ server resolves automatically). Disable either with `USDC_ETH=false` /
 
 ## Setup
 
+> 🧑‍🏫 **New to servers/crypto/terminals?** Follow
+> **[SETUP-GUIDE.md](SETUP-GUIDE.md)** — a click-by-click walkthrough that
+> assumes zero experience. For the condensed technical version, see
+> **[DEPLOY.md](DEPLOY.md)**.
+
+Local run (for development):
+
 ```bash
 npm install
 cp .env.example .env   # fill in your wallet addresses + secrets
