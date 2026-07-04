@@ -1,0 +1,21 @@
+{
+  "name": "tipfall",
+  "version": "1.0.0",
+  "description": "Self-hosted crypto donation page (ETH + SOL) with on-chain relay and OBS stream alerts",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:41729/git/Hyper-Claw/wolt-ageny"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
+    "ws": "^8.21.0"
+  }
+}

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support the stream 💜</title>
+<style>
+  :root {
+    --bg: #0f0f14; --card: #1a1a23; --ink: #ececf1; --muted: #9a9aad;
+    --accent: #a970ff; --accent2: #7c4dff; --ok: #3ddc84; --err: #ff6b6b;
+    --line: #2c2c3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #221a33, var(--bg));
+    color: var(--ink); min-height: 100vh; display: grid; place-items: start center;
+    padding: 40px 16px;
+  }
+  .card {
+    width: 100%; max-width: 460px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 16px; padding: 28px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  .sub { color: var(--muted); margin: 0 0 22px; font-size: .95rem; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 14px 0 6px; }
+  input, textarea {
+    width: 100%; background: #12121a; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px;
+    font-size: 1rem; font-family: inherit;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 64px; }
+  .chains { display: flex; gap: 10px; }
+  .chain {
+    flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: #12121a; color: var(--ink); font-size: 1rem; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .chain.active { border-color: var(--accent); background: #221a33; }
+  .amounts { display: flex; gap: 8px; margin-top: 6px; }
+  .amounts button {
+    flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid var(--line);
+    background: #12121a; color: var(--muted); cursor: pointer; font-size: .9rem;
+  }
+  .amounts button:hover { border-color: var(--accent); color: var(--ink); }
+  .go {
+    width: 100%; margin-top: 22px; padding: 14px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white; font-size: 1.05rem; font-weight: 600; cursor: pointer;
+  }
+  .go:disabled { opacity: .5; cursor: default; }
+  .err { color: var(--err); font-size: .9rem; margin-top: 10px; min-height: 1.2em; }
+
+  /* pay step */
+  .pay { text-align: center; }
+  .pay img { border-radius: 12px; background: white; padding: 6px; }
+  .exact {
+    font-family: ui-monospace, monospace; font-size: 1.15rem; margin: 14px 0 4px;
+    color: var(--accent); word-break: break-all;
+  }
+  .addr {
+    font-family: ui-monospace, monospace; font-size: .78rem; color: var(--muted);
+    word-break: break-all; margin: 6px 0 14px;
+  }
+  .hint { color: var(--muted); font-size: .85rem; margin: 10px 0; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  .row button {
+    flex: 1; padding: 11px; border-radius: 10px; border: 1px solid var(--line);
+    background: #12121a; color: var(--ink); cursor: pointer; font-size: .95rem;
+  }
+  .row button:hover { border-color: var(--accent); }
+  .paid { text-align: center; padding: 30px 0; }
+  .paid .big { font-size: 3rem; }
+  .paid h2 { color: var(--ok); margin: 10px 0 6px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="step-form">
+    <h1>Support the stream 💜</h1>
+    <p class="sub">Tip with crypto — your name and message pop up live on stream.</p>
+
+    <label>Coin</label>
+    <div class="chains" id="chains"></div>
+
+    <label>Amount (<span id="symbol">ETH</span>)</label>
+    <input id="amount" inputmode="decimal" placeholder="0.01">
+    <div class="amounts" id="presets"></div>
+
+    <label>Your name (shown on stream)</label>
+    <input id="name" maxlength="40" placeholder="Anonymous">
+
+    <label>Message (optional)</label>
+    <textarea id="message" maxlength="200" placeholder="gg!"></textarea>
+
+    <button class="go" id="go">Continue →</button>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="step-pay" class="pay hidden">
+    <h1>Almost there!</h1>
+    <p class="hint">Send <b>exactly</b> this amount — it's how we match the tip to your name:</p>
+    <div class="exact" id="exact"></div>
+    <img id="qr" alt="payment QR" width="260" height="260">
+    <div class="addr" id="payaddr"></div>
+    <div class="row">
+      <button id="copy-amount">Copy amount</button>
+      <button id="copy-addr">Copy address</button>
+    </div>
+    <div class="row hidden" id="mm-row">
+      <button id="metamask">🦊 Pay with MetaMask</button>
+    </div>
+    <p class="hint" id="expiry"></p>
+    <p class="hint">Waiting for payment… <span id="spin">◐</span></p>
+    <div class="err" id="err2"></div>
+  </div>
+
+  <div id="step-paid" class="paid hidden">
+    <div class="big">🎉</div>
+    <h2>Payment received!</h2>
+    <p class="hint">Your tip is popping up on stream right now. Thank you!</p>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const cfg = await fetch('/api/config').then(r => r.json());
+  const chainIds = Object.keys(cfg.chains);
+  if (!chainIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
+
+  const PRESETS = { eth: ['0.005', '0.01', '0.025', '0.05'], sol: ['0.05', '0.1', '0.25', '0.5'] };
+  let chain = chainIds[0];
+
+  function renderChains() {
+    $('chains').innerHTML = '';
+    for (const id of chainIds) {
+      const b = document.createElement('button');
+      b.className = 'chain' + (id === chain ? ' active' : '');
+      b.textContent = id === 'eth' ? 'Ξ Ethereum' : '◎ Solana';
+      b.onclick = () => { chain = id; renderChains(); };
+      $('chains').appendChild(b);
+    }
+    $('symbol').textContent = cfg.chains[chain].symbol;
+    $('presets').innerHTML = '';
+    for (const p of PRESETS[chain] ?? []) {
+      const b = document.createElement('button');
+      b.textContent = p;
+      b.onclick = () => { $('amount').value = p; };
+      $('presets').appendChild(b);
+    }
+  }
+  renderChains();
+
+  let poller, spinT;
+
+  $('go').onclick = async () => {
+    $('err').textContent = '';
+    const res = await fetch('/api/donate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        chain,
+        amount: $('amount').value.trim(),
+        name: $('name').value.trim(),
+        message: $('message').value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { $('err').textContent = data.error || 'Something went wrong'; return; }
+
+    $('step-form').classList.add('hidden');
+    $('step-pay').classList.remove('hidden');
+    $('exact').textContent = `${data.amount} ${data.symbol}`;
+    $('qr').src = data.qr;
+    $('payaddr').textContent = data.address;
+    $('expiry').textContent = `This request expires in ${data.expiresInMin} minutes.`;
+    $('copy-amount').onclick = () => navigator.clipboard.writeText(data.amount);
+    $('copy-addr').onclick = () => navigator.clipboard.writeText(data.address);
+
+    if (chain === 'eth' && window.ethereum) {
+      $('mm-row').classList.remove('hidden');
+      $('metamask').onclick = async () => {
+        $('err2').textContent = '';
+        try {
+          const [from] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{ from, to: data.address, value: '0x' + BigInt(data.amountBase).toString(16) }],
+          });
+        } catch (e) { $('err2').textContent = e?.message || 'Wallet error'; }
+      };
+    }
+
+    const frames = ['◐', '◓', '◑', '◒'];
+    let f = 0;
+    spinT = setInterval(() => { $('spin').textContent = frames[f++ % 4]; }, 250);
+    poller = setInterval(async () => {
+      const s = await fetch('/api/donate/' + data.id).then(r => r.json()).catch(() => null);
+      if (s?.status === 'paid') {
+        clearInterval(poller); clearInterval(spinT);
+        $('step-pay').classList.add('hidden');
+        $('step-paid').classList.remove('hidden');
+      }
+    }, 5000);
+  };
+})();
+</script>
+</body>
+</html>
