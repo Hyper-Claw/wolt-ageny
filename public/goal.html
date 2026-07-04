@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goal Widget</title>
+<style>
+  body { margin: 0; background: transparent; overflow: hidden;
+         font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
+  .wrap {
+    width: 380px; padding: 16px 18px; border-radius: 16px;
+    background: linear-gradient(135deg, rgba(26,16,46,.92), rgba(18,18,26,.92));
+    border: 1px solid #2c2c3a; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  }
+  .title { font-weight: 800; font-size: 1.1rem; margin-bottom: 8px; }
+  .bar { height: 22px; background: #12121a; border-radius: 11px; overflow: hidden; border: 1px solid #2c2c3a; }
+  .fill { height: 100%; width: 0; border-radius: 11px;
+          background: linear-gradient(90deg, #7c4dff, #a970ff, #3ddc84);
+          transition: width .8s cubic-bezier(.2,.8,.2,1); }
+  .nums { display: flex; justify-content: space-between; margin-top: 6px; font-size: .95rem; }
+  .nums .raised { color: #3ddc84; font-weight: 700; }
+  .nums .goal { color: #9a9aad; }
+  .top { margin-top: 14px; }
+  .top h4 { margin: 0 0 6px; font-size: .8rem; color: #9a9aad; text-transform: uppercase; letter-spacing: .05em; }
+  .donor { display: flex; justify-content: space-between; font-size: .95rem; padding: 3px 0; }
+  .donor .rank { color: #a970ff; margin-right: 6px; }
+  .donor .amt { color: #3ddc84; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title" id="title">Stream Goal</div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="nums"><span class="raised" id="raised">€0</span><span class="goal" id="goal"></span></div>
+  <div class="top hidden" id="topwrap">
+    <h4>Top Supporters</h4>
+    <div id="donors"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const key = params.get('key') || '';
+  const showTop = !params.has('nolist');
+  const $ = (id) => document.getElementById(id);
+
+  async function refresh() {
+    let s;
+    try { s = await fetch(`/api/stats?key=${encodeURIComponent(key)}`).then(r => r.json()); } catch { return; }
+    if (!s || s.error) return;
+
+    $('title').textContent = s.goalTitle || 'Stream Goal';
+    $('raised').textContent = `€${s.totalEur.toLocaleString()}`;
+    if (s.goalEur > 0) {
+      $('goal').textContent = `/ €${s.goalEur.toLocaleString()}`;
+      $('fill').style.width = Math.min(100, (s.totalEur / s.goalEur) * 100) + '%';
+    } else {
+      $('goal').textContent = `${s.count} tip${s.count === 1 ? '' : 's'}`;
+      $('fill').style.width = s.totalEur > 0 ? '100%' : '0';
+    }
+
+    if (showTop && s.top?.length) {
+      $('topwrap').classList.remove('hidden');
+      $('donors').innerHTML = '';
+      s.top.forEach((d, i) => {
+        const row = document.createElement('div');
+        row.className = 'donor';
+        const left = document.createElement('span');
+        const rank = document.createElement('span');
+        rank.className = 'rank'; rank.textContent = `#${i + 1}`;
+        left.appendChild(rank);
+        left.appendChild(document.createTextNode(d.name)); // textContent-safe
+        const amt = document.createElement('span');
+        amt.className = 'amt'; amt.textContent = `€${Math.round(d.eur)}`;
+        row.appendChild(left); row.appendChild(amt);
+        $('donors').appendChild(row);
+      });
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 15_000);
+
+  // Bump instantly when a donation lands.
+  function connect() {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws?key=${encodeURIComponent(key)}`);
+    ws.onmessage = () => refresh();
+    ws.onclose = () => setTimeout(connect, 3000);
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

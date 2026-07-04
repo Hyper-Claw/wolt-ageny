@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tipfall — Customize</title>
+<style>
+  :root { --bg:#0f0f14; --card:#1a1a23; --ink:#ececf1; --muted:#9a9aad;
+          --accent:#a970ff; --accent2:#7c4dff; --ok:#3ddc84; --line:#2c2c3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui,-apple-system,"Segoe UI",sans-serif;
+         background: radial-gradient(1200px 600px at 50% -10%, #221a33, var(--bg));
+         color: var(--ink); min-height:100vh; padding: 32px 16px; }
+  .card { width:100%; max-width:640px; margin:0 auto 20px; background:var(--card);
+          border:1px solid var(--line); border-radius:16px; padding:24px; }
+  h1 { margin:0 0 4px; font-size:1.5rem; } h2 { font-size:1.05rem; margin:0 0 12px; }
+  .sub { color:var(--muted); margin:0 0 18px; font-size:.9rem; }
+  label { display:block; font-size:.82rem; color:var(--muted); margin:12px 0 5px; }
+  input, select { width:100%; background:#12121a; color:var(--ink); border:1px solid var(--line);
+                  border-radius:9px; padding:10px 11px; font-size:.95rem; font-family:inherit; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .btn { padding:11px 16px; border:none; border-radius:10px; cursor:pointer; font-size:.95rem; font-weight:600; }
+  .btn.primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+  .btn.ghost { background:#12121a; color:var(--ink); border:1px solid var(--line); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .tier { border:1px solid var(--line); border-radius:12px; padding:14px; margin-top:12px; }
+  .tier .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .urlbox { font-family:ui-monospace,monospace; font-size:.8rem; background:#12121a;
+            border:1px solid var(--line); border-radius:9px; padding:10px; word-break:break-all; color:var(--accent); }
+  .status { min-height:1.3em; font-size:.9rem; margin-top:10px; }
+  .ok { color:var(--ok); } .err { color:#ff6b6b; }
+  small { color:var(--muted); }
+  hr { border:none; border-top:1px solid var(--line); margin:18px 0; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Tipfall — Customize 🎛️</h1>
+  <p class="sub">Set your alert sound, fundraising goal, and donation tiers. Changes save to the server and your OBS overlay picks them up automatically.</p>
+  <label>Admin key <small>(the ADMIN_KEY from your .env)</small></label>
+  <input id="adminKey" type="password" placeholder="paste ADMIN_KEY">
+  <label>Overlay key <small>(the OVERLAY_KEY — used to build your OBS URLs)</small></label>
+  <input id="overlayKey" type="password" placeholder="paste OVERLAY_KEY">
+</div>
+
+<div class="card">
+  <h2>Alert sound</h2>
+  <div class="row">
+    <select id="sound" style="max-width:200px">
+      <option value="chime">Chime</option>
+      <option value="coin">Coin</option>
+      <option value="fanfare">Fanfare</option>
+      <option value="none">Silent</option>
+    </select>
+    <button class="btn ghost" id="preview">▶ Preview</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Fundraising goal</h2>
+  <div class="grid">
+    <div><label>Goal title</label><input id="goalTitle" placeholder="New PC Goal"></div>
+    <div><label>Goal amount (€, 0 = none)</label><input id="goalEur" type="number" min="0" placeholder="500"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Donation tiers <small>— bigger tips, bigger reactions</small></h2>
+  <p class="sub">Each tier triggers above its € amount. Add a GIF URL, a border color, or a different sound. Highest matching tier wins.</p>
+  <div id="tiers"></div>
+  <button class="btn ghost" id="addTier" style="margin-top:12px">+ Add tier</button>
+</div>
+
+<div class="card">
+  <div class="row">
+    <button class="btn primary" id="save">Save settings</button>
+    <button class="btn ghost" id="test">Send test alert</button>
+  </div>
+  <div class="status" id="status"></div>
+</div>
+
+<div class="card">
+  <h2>Your OBS browser-source URLs</h2>
+  <p class="sub">Paste your overlay key above, then add these as Browser Sources in OBS.</p>
+  <label>Alerts</label><div class="urlbox" id="urlAlerts">—</div>
+  <label>Goal bar</label><div class="urlbox" id="urlGoal">—</div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const SOUNDS = ['chime','coin','fanfare','none'];
+
+  // --- sound preview (same synth as the overlay) ---
+  function playSound(kind) {
+    if (kind === 'none') return;
+    const ctx = new AudioContext();
+    const beep = (freq,start,dur,gain=0.25) => {
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine'; o.frequency.value=freq;
+      g.gain.setValueAtTime(0.001,ctx.currentTime+start);
+      g.gain.exponentialRampToValueAtTime(gain,ctx.currentTime+start+0.02);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+start+dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime+start); o.stop(ctx.currentTime+start+dur+0.05);
+    };
+    if(kind==='coin'){beep(988,0,0.12);beep(1319,0.08,0.5);}
+    else if(kind==='fanfare'){[523,659,784,1047].forEach((f,i)=>beep(f,i*0.12,0.8));}
+    else{[523.25,659.25,783.99].forEach((f,i)=>beep(f,i*0.09,0.9));}
+  }
+  $('preview').onclick = () => playSound($('sound').value);
+
+  // --- tiers UI ---
+  const tiers = [];
+  function renderTiers() {
+    $('tiers').innerHTML = '';
+    tiers.forEach((t, i) => {
+      const div = document.createElement('div');
+      div.className = 'tier';
+      div.innerHTML = `
+        <div class="grid3">
+          <div><label>Above €</label><input type="number" min="0" value="${t.minEur}" data-k="minEur" data-i="${i}"></div>
+          <div><label>Border color</label><input value="${t.color||''}" placeholder="#3ddc84" data-k="color" data-i="${i}"></div>
+          <div><label>Sound</label><select data-k="sound" data-i="${i}">
+            <option value="">(use default)</option>
+            ${SOUNDS.map(s=>`<option value="${s}" ${t.sound===s?'selected':''}>${s}</option>`).join('')}
+          </select></div>
+        </div>
+        <label>GIF / image URL (optional)</label>
+        <input value="${t.gif||''}" placeholder="https://…/celebrate.gif" data-k="gif" data-i="${i}">
+        <div class="row" style="margin-top:10px">
+          <button class="btn ghost" data-rm="${i}">Remove</button>
+        </div>`;
+      $('tiers').appendChild(div);
+    });
+    $('tiers').querySelectorAll('[data-k]').forEach(inp => {
+      inp.oninput = () => { tiers[+inp.dataset.i][inp.dataset.k] =
+        inp.dataset.k==='minEur' ? Number(inp.value) : inp.value; };
+    });
+    $('tiers').querySelectorAll('[data-rm]').forEach(b => {
+      b.onclick = () => { tiers.splice(+b.dataset.rm,1); renderTiers(); };
+    });
+  }
+  $('addTier').onclick = () => { tiers.push({ minEur:10, color:'', gif:'', sound:'' }); renderTiers(); };
+
+  // --- URLs ---
+  function updateUrls() {
+    const k = $('overlayKey').value.trim();
+    const base = location.origin;
+    $('urlAlerts').textContent = k ? `${base}/overlay?key=${k}` : '— (enter overlay key)';
+    $('urlGoal').textContent   = k ? `${base}/goal?key=${k}` : '— (enter overlay key)';
+  }
+  $('overlayKey').oninput = updateUrls;
+
+  // --- load current settings (needs overlay key) ---
+  async function load() {
+    const k = $('overlayKey').value.trim();
+    if (!k) return;
+    try {
+      const s = await fetch(`/api/overlay-settings?key=${encodeURIComponent(k)}`).then(r=>r.json());
+      if (s && !s.error) {
+        $('sound').value = s.sound || 'chime';
+        $('goalTitle').value = s.goalTitle || '';
+        $('goalEur').value = s.goalEur || 0;
+        tiers.length = 0; (s.tiers||[]).forEach(t => tiers.push(t)); renderTiers();
+      }
+    } catch {}
+  }
+  $('overlayKey').addEventListener('change', load);
+
+  function setStatus(msg, ok) { const el=$('status'); el.textContent=msg; el.className='status '+(ok?'ok':'err'); }
+
+  $('save').onclick = async () => {
+    const res = await fetch('/api/overlay-settings', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'x-admin-key': $('adminKey').value.trim() },
+      body: JSON.stringify({
+        sound: $('sound').value,
+        goalTitle: $('goalTitle').value.trim(),
+        goalEur: Number($('goalEur').value) || 0,
+        tiers,
+      }),
+    });
+    setStatus(res.ok ? '✔ Saved — your overlay will update within a minute.' : '✗ Save failed (check admin key).', res.ok);
+  };
+
+  $('test').onclick = async () => {
+    const res = await fetch('/api/test-alert', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'x-admin-key': $('adminKey').value.trim() },
+      body: JSON.stringify({ name:'TestDonor', message:'Testing the overlay!', eur: 25 }),
+    });
+    setStatus(res.ok ? '✔ Test alert sent to your overlay.' : '✗ Failed (check admin key).', res.ok);
+  };
+
+  renderTiers(); updateUrls();
+})();
+</script>
+</body>
+</html>

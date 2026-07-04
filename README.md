@@ -1,30 +1,48 @@
 # Tipfall 💜
 
-Self-hosted crypto donation page for streamers — **ETH + SOL**, with live
-alerts on stream via an OBS browser source. No payment processor, no
-custodian, nothing that can ban you: tips go straight from the viewer's
-wallet to yours, and this server only ever knows your **public** addresses.
+Self-hosted crypto donation page for streamers — **ETH, SOL, and USDC**
+(on both chains) — with live alerts, a fundraising goal bar, and a
+point-and-click customizer, all as OBS browser sources. No payment
+processor, no custodian, nothing that can ban you: tips go straight from
+the viewer's wallet to yours, and this server only ever knows your
+**public** addresses.
 
 ## How it works
 
 ```
-viewer ──(ETH/SOL tx)──▶ your wallet
+viewer ──(ETH / SOL / USDC tx)──▶ your wallet
    │                        ▲
    ▼                        │ watches chain via public RPC
-donation page ──▶ relay server ──▶ WebSocket ──▶ OBS overlay alert 🎉
+donation page ──▶ relay server ──▶ WebSocket ──▶ OBS alert + goal bar 🎉
 ```
 
-1. A viewer opens the donation page, enters name + message + amount.
+1. A viewer opens the donation page, picks an asset, enters name + message
+   + amount.
 2. The server hands back an **exact amount with a unique dust tail**
-   (e.g. `0.0100000473 ETH`). That tail is how the on-chain watcher knows
+   (e.g. `25.000473 USDC`). That tail is how the on-chain watcher knows
    which name/message belongs to which payment — no accounts, no tx-hash
    pasting.
-3. The watcher polls the chain (ETH blocks every 15 s, SOL signatures every
-   10 s), verifies the payment actually landed in your wallet, and pushes an
-   alert to the overlay. Payments that don't match a pending donation still
-   alert as **Anonymous**, so nothing is ever missed.
-4. Alerts can't be faked: they are only emitted for real, confirmed on-chain
-   transfers to your address (deduped by tx id).
+3. The watcher polls the chain (ETH blocks + USDC logs every 15 s, SOL
+   signatures every 10 s), verifies the payment actually landed in your
+   wallet, and pushes an alert to the overlay. Payments that don't match a
+   pending donation still alert as **Anonymous**, so nothing is missed.
+4. Alerts can't be faked: they are only emitted for real, confirmed
+   on-chain transfers to your address (deduped by tx id).
+
+## Assets supported
+
+| Asset | Chain | Notes |
+|-------|-------|-------|
+| ETH   | Ethereum | native, one-click MetaMask + QR |
+| USDC  | Ethereum | ERC-20, one-click MetaMask + QR |
+| SOL   | Solana | native, QR / any wallet |
+| USDC  | Solana | SPL, QR / any wallet |
+
+USDC is a stablecoin, so the EUR value of a tip doesn't swing with the
+market. USDC is received on the **same** addresses (the ERC-20 goes to your
+ETH address; the SPL token to your Solana account's token account, which the
+server resolves automatically). Disable either with `USDC_ETH=false` /
+`USDC_SOL=false`.
 
 ## Setup
 
@@ -34,18 +52,32 @@ cp .env.example .env   # fill in your wallet addresses + secrets
 npm start
 ```
 
+The console prints all your URLs on start. In OBS, add each overlay as a
+**Browser Source** (transparent background):
+
 - **Donation page:** `http://<host>:3000/` — link this in your Twitch panel.
-- **OBS overlay:** add a Browser Source pointing to
-  `http://<host>:3000/overlay?key=<OVERLAY_KEY>` (size it e.g. 800×300,
-  it has a transparent background).
-  - Optional query params: `&duration=10` (seconds on screen), `&mute`.
+- **Alerts overlay:** `http://<host>:3000/overlay?key=<OVERLAY_KEY>`
+  (e.g. 900×360). Query params: `&duration=10` (seconds), `&mute`.
+- **Goal bar / top supporters:** `http://<host>:3000/goal?key=<OVERLAY_KEY>`
+  (e.g. 440×340). Add `&nolist` to hide the supporter list.
+- **Customizer:** `http://<host>:3000/customize` — set the alert sound, the
+  goal, and donation **tiers** (bigger tips get a different color, GIF, and
+  sound). Saves to the server; overlays pick changes up within a minute.
+
+### Customization (the `/customize` page)
+
+- **Sounds:** `chime`, `coin`, `fanfare`, or silent — synthesized in the
+  browser, so there are no audio files to host. Preview before saving.
+- **Goal:** title + € target; the bar fills as tips arrive.
+- **Tiers:** e.g. "above €100 → gold border + fanfare + a celebration GIF".
+  The highest tier a donation clears wins.
 
 ### Test the overlay
 
 ```bash
 curl -X POST http://localhost:3000/api/test-alert \
   -H "x-admin-key: $ADMIN_KEY" -H "content-type: application/json" \
-  -d '{"name":"TestDonor","message":"Hello stream!"}'
+  -d '{"name":"TestDonor","message":"Hello stream!","eur":150}'
 ```
 
 ### Deploying
@@ -57,17 +89,20 @@ WebSocket automatically uses `wss://` on HTTPS pages.
 
 ## Security model
 
-- The server holds **no keys and no funds** — it's read-only on both chains.
-- Overlay events require the `OVERLAY_KEY`; test alerts require `ADMIN_KEY`.
+- The server holds **no keys and no funds** — it's read-only on all chains.
+- Overlay/goal/settings reads require the `OVERLAY_KEY`; saving settings and
+  test alerts require the `ADMIN_KEY`.
 - Donor names/messages are rendered with `textContent` (no HTML injection
-  into your stream).
+  into your stream or goal widget).
 - Alerts fire only for transactions the watcher itself verified on-chain.
 
 ## Notes for the streamer
 
-- Tips received are income; in Germany crypto received for streaming is
-  taxable at its EUR value on receipt — keep the SQLite ledger
-  (`data/tipfall.db`) as your record, and talk to a Steuerberater once
-  amounts become regular.
-- Public RPCs are rate-limited but fine for tip volume. If you outgrow
-  them, set `ETH_RPC` / `SOL_RPC` to a free Alchemy/Helius endpoint.
+- Tips are income; in Germany crypto received for streaming is taxable at
+  its EUR value on receipt — the SQLite ledger (`data/tipfall.db`) stores
+  the EUR value per tip as your record. Talk to a Steuerberater once amounts
+  become regular.
+- EUR conversion uses CoinGecko. If your host can't reach it (or you'd
+  rather not depend on it), set fixed rates via `PRICES_EUR` in `.env`.
+- Public RPCs are rate-limited but fine for tip volume. If you outgrow them,
+  set `ETH_RPC` / `SOL_RPC` to a free Alchemy/Helius endpoint.

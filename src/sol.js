@@ -1,8 +1,6 @@
 import { config } from './config.js';
 import { getState, setState } from './db.js';
 
-const LAMPORTS = 10n ** 9n;
-
 let rpcId = 0;
 async function rpc(method, params = []) {
   const res = await fetch(config.solRpc, {
@@ -16,43 +14,26 @@ async function rpc(method, params = []) {
   return json.result;
 }
 
-export function solToLamports(amountStr) {
-  const [whole = '0', frac = ''] = String(amountStr).split('.');
-  return BigInt(whole) * LAMPORTS + BigInt((frac + '0'.repeat(9)).slice(0, 9));
-}
-
-export function lamportsToSol(lamports) {
-  const l = BigInt(lamports);
-  const whole = l / LAMPORTS;
-  const frac = (l % LAMPORTS).toString().padStart(9, '0').replace(/0+$/, '');
-  return frac ? `${whole}.${frac}` : whole.toString();
-}
-
-// Polls signatures for the donation address and reports every transaction
-// that increased its balance.
-export function watchSol(onPayment) {
-  if (!config.solAddress) return;
+// Generic signature poller for one address. `extract(tx)` returns the base-unit
+// amount credited to us in that tx (0n to skip). `stateKey` stores the cursor.
+function pollAddress({ address, stateKey, extract, onHit }) {
   let scanning = false;
-  let bootstrapped = !!getState('solLastSig');
+  let bootstrapped = !!getState(stateKey);
 
   async function tick() {
     if (scanning) return;
     scanning = true;
     try {
-      const until = getState('solLastSig');
+      const until = getState(stateKey);
       const sigs = await rpc('getSignaturesForAddress', [
-        config.solAddress,
+        address,
         { limit: 25, ...(until ? { until } : {}), commitment: 'confirmed' },
       ]);
-      if (!sigs?.length) {
-        // Empty history on a fresh wallet: nothing to skip, start live.
-        bootstrapped = true;
-        return;
-      }
+      if (!sigs?.length) { bootstrapped = true; return; }
 
-      // First run with no stored cursor: don't replay old history, just set the cursor.
+      // First run with no cursor: don't replay history, just mark the tip.
       if (!bootstrapped) {
-        setState('solLastSig', sigs[0].signature);
+        setState(stateKey, sigs[0].signature);
         bootstrapped = true;
         return;
       }
@@ -64,25 +45,15 @@ export function watchSol(onPayment) {
           { encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0 },
         ]);
         if (!tx?.meta || tx.meta.err) continue;
-
-        const keys = tx.transaction.message.accountKeys.map((k) => (typeof k === 'string' ? k : k.pubkey));
-        const idx = keys.indexOf(config.solAddress);
-        if (idx === -1) continue;
-
-        const delta = BigInt(tx.meta.postBalances[idx]) - BigInt(tx.meta.preBalances[idx]);
-        if (delta <= 0n) continue;
-
-        await onPayment({
-          chain: 'sol',
-          txid: sig.signature,
-          sender: keys[0] ?? null,
-          amount: delta.toString(),
-          display: lamportsToSol(delta),
-        });
+        const amount = extract(tx);
+        if (amount > 0n) {
+          const keys = tx.transaction.message.accountKeys.map((k) => (typeof k === 'string' ? k : k.pubkey));
+          await onHit({ txid: sig.signature, sender: keys[0] ?? null, amount });
+        }
       }
-      setState('solLastSig', sigs[sigs.length - 1].signature);
+      setState(stateKey, sigs[sigs.length - 1].signature);
     } catch (err) {
-      console.error('[sol] watcher error:', err.message);
+      console.error(`[sol] watcher error (${stateKey}):`, err.message);
     } finally {
       scanning = false;
     }
@@ -90,5 +61,59 @@ export function watchSol(onPayment) {
 
   tick();
   setInterval(tick, 10_000);
-  console.log(`[sol] watching ${config.solAddress} via ${config.solRpc}`);
+}
+
+export function watchSol({ native, usdc }, onPayment) {
+  // Native SOL: balance delta on the owner account.
+  if (native) {
+    pollAddress({
+      address: native.recipient,
+      stateKey: 'solLastSig',
+      extract: (tx) => {
+        const keys = tx.transaction.message.accountKeys.map((k) => (typeof k === 'string' ? k : k.pubkey));
+        const idx = keys.indexOf(native.recipient);
+        if (idx === -1) return 0n;
+        return BigInt(tx.meta.postBalances[idx]) - BigInt(tx.meta.preBalances[idx]);
+      },
+      onHit: ({ txid, sender, amount }) =>
+        onPayment({ asset: native, txid, sender, amount: amount.toString(), display: native.toDisplay(amount) }),
+    });
+    console.log(`[sol] watching ${native.recipient} (SOL) via ${config.solRpc}`);
+  }
+
+  // USDC (SPL): resolve the owner's token account, then watch it.
+  if (usdc) {
+    (async () => {
+      let ata = getState('solUsdcAta');
+      while (!ata) {
+        try {
+          const res = await rpc('getTokenAccountsByOwner', [
+            usdc.recipient, { mint: usdc.mint }, { encoding: 'jsonParsed', commitment: 'confirmed' },
+          ]);
+          ata = res?.value?.[0]?.pubkey ?? null;
+        } catch (err) {
+          console.error('[sol] USDC ATA lookup error:', err.message);
+        }
+        if (!ata) { await new Promise((r) => setTimeout(r, 60_000)); }
+      }
+      setState('solUsdcAta', ata);
+      pollAddress({
+        address: ata,
+        stateKey: 'solUsdcLastSig',
+        extract: (tx) => {
+          const owned = (bals) => (bals ?? []).find(
+            (b) => b.mint === usdc.mint && b.owner === usdc.recipient,
+          );
+          const pre = owned(tx.meta.preTokenBalances);
+          const post = owned(tx.meta.postTokenBalances);
+          if (!post) return 0n;
+          const preAmt = pre ? BigInt(pre.uiTokenAmount.amount) : 0n;
+          return BigInt(post.uiTokenAmount.amount) - preAmt;
+        },
+        onHit: ({ txid, sender, amount }) =>
+          onPayment({ asset: usdc, txid, sender, amount: amount.toString(), display: usdc.toDisplay(amount) }),
+      });
+      console.log(`[sol] watching ${ata} (USDC ATA) via ${config.solRpc}`);
+    })();
+  }
 }

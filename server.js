@@ -6,12 +6,14 @@ import { WebSocketServer } from 'ws';
 import QRCode from 'qrcode';
 
 import { config } from './src/config.js';
+import { buildAssets } from './src/assets.js';
 import {
   createPending, getPending, matchPending, expectedInUse,
   donationSeen, recordDonation, markPaid,
+  getState, setState, totalEur, topDonors, recentDonations,
 } from './src/db.js';
-import { watchEth, ethToWei, weiToEth } from './src/eth.js';
-import { watchSol, solToLamports, lamportsToSol } from './src/sol.js';
+import { watchEth } from './src/eth.js';
+import { watchSol } from './src/sol.js';
 import { getPrices, eurValue } from './src/prices.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,28 +22,23 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PENDING_TTL_MS = config.pendingTtlMin * 60_000;
-const CHAINS = {
-  eth: {
-    address: () => config.ethAddress,
-    toBase: ethToWei,
-    toDisplay: weiToEth,
-    min: () => ethToWei(String(config.minEth)),
-    // dust uniquifier range: 1e9–1e12 wei (≤ 0.000001 ETH, fractions of a cent)
-    dust: () => 1_000_000_000n + BigInt(crypto.randomInt(1, 999_000)) * 1_000_000_000n,
-    uri: (addr, display) => `ethereum:${addr}?value=${ethToWei(display).toString()}`,
-    symbol: 'ETH',
-  },
-  sol: {
-    address: () => config.solAddress,
-    toBase: solToLamports,
-    toDisplay: lamportsToSol,
-    min: () => solToLamports(String(config.minSol)),
-    // dust uniquifier: 1–99,999 lamports (≤ 0.0001 SOL)
-    dust: () => BigInt(crypto.randomInt(1, 99_999)),
-    uri: (addr, display) => `solana:${addr}?amount=${display}`,
-    symbol: 'SOL',
-  },
+const ASSETS = buildAssets(config);
+
+// -------------------------------------------------------- overlay settings
+const DEFAULT_SETTINGS = {
+  sound: 'chime',                       // chime | coin | fanfare | none
+  goalTitle: config.goalTitle,
+  goalEur: config.goalEur,
+  // tiers: pick the highest whose minEur <= donation EUR
+  tiers: [],                            // [{ minEur, color, gif, sound }]
 };
+
+function getSettings() {
+  const raw = getState('overlaySettings');
+  if (!raw) return { ...DEFAULT_SETTINGS };
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }; }
+  catch { return { ...DEFAULT_SETTINGS }; }
+}
 
 // ---------------------------------------------------------------- overlay ws
 const wss = new WebSocketServer({ noServer: true });
@@ -54,128 +51,165 @@ function broadcast(event) {
 }
 
 // ------------------------------------------------------------ payment intake
-// Called by both chain watchers for every incoming transfer.
-async function onPayment({ chain, txid, sender, amount, display }) {
+async function onPayment({ asset, txid, sender, amount, display }) {
   if (donationSeen(txid)) return;
 
-  const c = CHAINS[chain];
-  if (BigInt(amount) < c.min()) {
-    recordDonation({ txid, chain, sender, amount, name: null, message: null, created_at: Date.now() });
+  if (BigInt(amount) < asset.min) {
+    recordDonation({
+      txid, asset: asset.id, chain: asset.chain, sender, amount,
+      eur: null, name: null, message: null, created_at: Date.now(),
+    });
     return;
   }
 
-  const pending = matchPending(chain, amount, PENDING_TTL_MS);
+  const pending = matchPending(asset.id, amount, PENDING_TTL_MS);
   const name = pending?.name || null;
   const message = pending?.message || null;
 
-  recordDonation({ txid, chain, sender, amount, name, message, created_at: Date.now() });
+  const prices = await getPrices();
+  const eur = eurValue(asset, display, prices);
+
+  recordDonation({
+    txid, asset: asset.id, chain: asset.chain, sender, amount,
+    eur, name, message, created_at: Date.now(),
+  });
   if (pending) markPaid(pending.id, txid);
 
-  const prices = await getPrices();
   const alert = {
     type: 'donation',
-    chain,
-    symbol: c.symbol,
-    amount: display,
-    eur: eurValue(chain, display, prices),
-    name: name || 'Anonymous',
-    message: message || '',
+    asset: asset.id, symbol: asset.symbol,
+    amount: display, eur,
+    name: name || 'Anonymous', message: message || '',
     txid,
   };
-  console.log(`[tip] ${alert.name}: ${alert.amount} ${alert.symbol}${alert.eur ? ` (~€${alert.eur})` : ''}`);
-  broadcast(alert);
+  console.log(`[tip] ${alert.name}: ${alert.amount} ${alert.symbol}${eur != null ? ` (~€${eur})` : ''}`);
+  broadcast({ ...alert, total: totalEur().total });
 }
 
 // ------------------------------------------------------------------- routes
 app.get('/api/config', (_req, res) => {
   res.json({
     streamer: config.streamerName,
-    chains: Object.fromEntries(
-      Object.entries(CHAINS)
-        .filter(([, c]) => c.address())
-        .map(([id, c]) => [id, { address: c.address(), symbol: c.symbol }]),
+    assets: Object.fromEntries(
+      Object.values(ASSETS).map((a) => [a.id, {
+        symbol: a.symbol, label: a.label, recipient: a.recipient, presets: a.presets,
+      }]),
     ),
   });
 });
 
-// Donor announces intent: we hand back the exact amount whose dust tail
-// identifies them, so the watcher can attach their name/message on match.
 app.post('/api/donate', async (req, res) => {
-  const { chain, amount, name, message } = req.body ?? {};
-  const c = CHAINS[chain];
-  if (!c || !c.address()) return res.status(400).json({ error: 'unknown or disabled chain' });
+  const { asset: assetId, amount, name, message } = req.body ?? {};
+  const asset = ASSETS[assetId];
+  if (!asset) return res.status(400).json({ error: 'unknown or disabled asset' });
   if (!/^\d+(\.\d+)?$/.test(String(amount ?? ''))) return res.status(400).json({ error: 'invalid amount' });
 
   let base;
-  try {
-    base = c.toBase(String(amount));
-  } catch {
-    return res.status(400).json({ error: 'invalid amount' });
-  }
-  if (base < c.min()) {
-    return res.status(400).json({ error: `minimum is ${c.toDisplay(c.min())} ${c.symbol}` });
+  try { base = asset.toBase(String(amount)); }
+  catch { return res.status(400).json({ error: 'invalid amount' }); }
+  if (base < asset.min) {
+    return res.status(400).json({ error: `minimum is ${asset.toDisplay(asset.min)} ${asset.symbol}` });
   }
 
   let expected;
   for (let i = 0; i < 10; i++) {
-    expected = (base + c.dust()).toString();
-    if (!expectedInUse(chain, expected, PENDING_TTL_MS)) break;
+    expected = (base + asset.dust()).toString();
+    if (!expectedInUse(asset.id, expected, PENDING_TTL_MS)) break;
     expected = null;
   }
   if (!expected) return res.status(503).json({ error: 'busy, try again' });
 
   const id = crypto.randomUUID();
   createPending({
-    id, chain, expected,
+    id, asset: asset.id, chain: asset.chain, expected,
     name: String(name ?? '').slice(0, 40) || null,
     message: String(message ?? '').slice(0, 200) || null,
     created_at: Date.now(),
   });
 
-  const display = c.toDisplay(expected);
-  const qr = await QRCode.toDataURL(c.uri(c.address(), display), { margin: 1, width: 260 });
+  const display = asset.toDisplay(expected);
+  const qr = await QRCode.toDataURL(asset.uri(asset.recipient, display), { margin: 1, width: 260 });
   res.json({
-    id,
-    address: c.address(),
-    amount: display,
-    amountBase: expected,
-    symbol: c.symbol,
-    expiresInMin: config.pendingTtlMin,
-    qr,
+    id, asset: asset.id, symbol: asset.symbol,
+    recipient: asset.recipient, amount: display, amountBase: expected,
+    wallet: asset.wallet ? asset.wallet(asset.recipient, expected) : null,
+    expiresInMin: config.pendingTtlMin, qr,
   });
 });
 
-// Donor page polls this to flip to "payment received".
 app.get('/api/donate/:id', (req, res) => {
   const p = getPending(req.params.id);
   if (!p) return res.status(404).json({ error: 'not found' });
   res.json({ status: p.status, txid: p.txid ?? null });
 });
 
-// Fire a fake alert to test the OBS overlay.
-app.post('/api/test-alert', (req, res) => {
+// --- overlay-facing (require overlay key) ---
+function overlayAuth(req, res, next) {
+  if (req.query.key !== config.overlayKey) return res.status(403).json({ error: 'forbidden' });
+  next();
+}
+
+app.get('/api/overlay-settings', overlayAuth, (_req, res) => res.json(getSettings()));
+
+app.get('/api/stats', overlayAuth, (_req, res) => {
+  const s = getSettings();
+  const { total, n } = totalEur();
+  res.json({
+    totalEur: Math.round(total * 100) / 100,
+    count: n,
+    goalEur: s.goalEur,
+    goalTitle: s.goalTitle,
+    top: topDonors(5),
+    recent: recentDonations(8),
+  });
+});
+
+// --- admin (require admin key header) ---
+function adminAuth(req, res, next) {
   if (req.get('x-admin-key') !== config.adminKey) return res.status(403).json({ error: 'forbidden' });
+  next();
+}
+
+app.post('/api/overlay-settings', adminAuth, (req, res) => {
+  const b = req.body ?? {};
+  const clean = {
+    sound: ['chime', 'coin', 'fanfare', 'none'].includes(b.sound) ? b.sound : 'chime',
+    goalTitle: String(b.goalTitle ?? config.goalTitle).slice(0, 60),
+    goalEur: Math.max(0, Number(b.goalEur) || 0),
+    tiers: Array.isArray(b.tiers) ? b.tiers.slice(0, 5).map((t) => ({
+      minEur: Math.max(0, Number(t.minEur) || 0),
+      color: String(t.color ?? '').slice(0, 20),
+      gif: String(t.gif ?? '').slice(0, 400),
+      sound: ['chime', 'coin', 'fanfare', 'none', ''].includes(t.sound) ? t.sound : '',
+    })).sort((a, z) => a.minEur - z.minEur) : [],
+  };
+  setState('overlaySettings', JSON.stringify(clean));
+  res.json({ ok: true, settings: clean });
+});
+
+app.post('/api/test-alert', adminAuth, (req, res) => {
+  const eur = Number(req.body?.eur) || 25;
   broadcast({
-    type: 'donation',
-    chain: 'eth',
-    symbol: 'ETH',
-    amount: '0.05',
-    eur: 150,
+    type: 'donation', asset: 'eth', symbol: 'ETH',
+    amount: req.body?.amount || '0.01', eur,
     name: req.body?.name || 'TestDonor',
     message: req.body?.message || 'This is a test alert — looking good!',
-    txid: 'test',
+    txid: 'test', total: totalEur().total,
   });
   res.json({ ok: true });
 });
 
-app.get('/overlay', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
-});
+app.get('/overlay', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'overlay.html')));
+app.get('/goal', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'goal.html')));
+app.get('/customize', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'customize.html')));
 
 // -------------------------------------------------------------------- start
 const server = app.listen(config.port, () => {
   console.log(`[tipfall] donation page  → http://localhost:${config.port}/`);
-  console.log(`[tipfall] OBS overlay    → http://localhost:${config.port}/overlay?key=${config.overlayKey}`);
+  console.log(`[tipfall] OBS alerts     → http://localhost:${config.port}/overlay?key=${config.overlayKey}`);
+  console.log(`[tipfall] OBS goal bar   → http://localhost:${config.port}/goal?key=${config.overlayKey}`);
+  console.log(`[tipfall] customize      → http://localhost:${config.port}/customize`);
+  console.log(`[tipfall] enabled assets: ${Object.keys(ASSETS).join(', ') || '(none — set ETH_ADDRESS / SOL_ADDRESS)'}`);
 });
 
 server.on('upgrade', (req, socket, head) => {
@@ -187,5 +221,10 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
-watchEth(onPayment);
-watchSol(onPayment);
+const byChain = (chain) => ({
+  native: Object.values(ASSETS).find((a) => a.chain === chain && a.kind === 'native') ?? null,
+  usdc: Object.values(ASSETS).find((a) => a.chain === chain && a.kind !== 'native') ?? null,
+});
+
+watchEth(byChain('eth'), onPayment);
+watchSol(byChain('sol'), onPayment);

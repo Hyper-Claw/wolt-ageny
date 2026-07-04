@@ -32,13 +32,13 @@
   }
   input:focus, textarea:focus { outline: none; border-color: var(--accent); }
   textarea { resize: vertical; min-height: 64px; }
-  .chains { display: flex; gap: 10px; }
-  .chain {
-    flex: 1; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
-    background: #12121a; color: var(--ink); font-size: 1rem; cursor: pointer;
-    transition: border-color .15s, background .15s;
+  .assets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .asset {
+    padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: #12121a; color: var(--ink); font-size: .95rem; cursor: pointer;
+    transition: border-color .15s, background .15s; text-align: center;
   }
-  .chain.active { border-color: var(--accent); background: #221a33; }
+  .asset.active { border-color: var(--accent); background: #221a33; }
   .amounts { display: flex; gap: 8px; margin-top: 6px; }
   .amounts button {
     flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid var(--line);
@@ -53,7 +53,6 @@
   .go:disabled { opacity: .5; cursor: default; }
   .err { color: var(--err); font-size: .9rem; margin-top: 10px; min-height: 1.2em; }
 
-  /* pay step */
   .pay { text-align: center; }
   .pay img { border-radius: 12px; background: white; padding: 6px; }
   .exact {
@@ -83,8 +82,8 @@
     <h1>Support the stream 💜</h1>
     <p class="sub">Tip with crypto — your name and message pop up live on stream.</p>
 
-    <label>Coin</label>
-    <div class="chains" id="chains"></div>
+    <label>Pay with</label>
+    <div class="assets" id="assets"></div>
 
     <label>Amount (<span id="symbol">ETH</span>)</label>
     <input id="amount" inputmode="decimal" placeholder="0.01">
@@ -129,31 +128,32 @@
 (async () => {
   const $ = (id) => document.getElementById(id);
   const cfg = await fetch('/api/config').then(r => r.json());
-  const chainIds = Object.keys(cfg.chains);
-  if (!chainIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
+  const assetIds = Object.keys(cfg.assets);
+  if (!assetIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
 
-  const PRESETS = { eth: ['0.005', '0.01', '0.025', '0.05'], sol: ['0.05', '0.1', '0.25', '0.5'] };
-  let chain = chainIds[0];
+  let asset = assetIds[0];
 
-  function renderChains() {
-    $('chains').innerHTML = '';
-    for (const id of chainIds) {
+  function render() {
+    $('assets').innerHTML = '';
+    for (const id of assetIds) {
+      const a = cfg.assets[id];
       const b = document.createElement('button');
-      b.className = 'chain' + (id === chain ? ' active' : '');
-      b.textContent = id === 'eth' ? 'Ξ Ethereum' : '◎ Solana';
-      b.onclick = () => { chain = id; renderChains(); };
-      $('chains').appendChild(b);
+      b.className = 'asset' + (id === asset ? ' active' : '');
+      b.textContent = a.label;
+      b.onclick = () => { asset = id; render(); };
+      $('assets').appendChild(b);
     }
-    $('symbol').textContent = cfg.chains[chain].symbol;
+    const a = cfg.assets[asset];
+    $('symbol').textContent = a.symbol;
     $('presets').innerHTML = '';
-    for (const p of PRESETS[chain] ?? []) {
-      const b = document.createElement('button');
-      b.textContent = p;
-      b.onclick = () => { $('amount').value = p; };
-      $('presets').appendChild(b);
+    for (const p of a.presets ?? []) {
+      const btn = document.createElement('button');
+      btn.textContent = p;
+      btn.onclick = () => { $('amount').value = p; };
+      $('presets').appendChild(btn);
     }
   }
-  renderChains();
+  render();
 
   let poller, spinT;
 
@@ -163,7 +163,7 @@
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        chain,
+        asset,
         amount: $('amount').value.trim(),
         name: $('name').value.trim(),
         message: $('message').value.trim(),
@@ -176,23 +176,26 @@
     $('step-pay').classList.remove('hidden');
     $('exact').textContent = `${data.amount} ${data.symbol}`;
     $('qr').src = data.qr;
-    $('payaddr').textContent = data.address;
+    $('payaddr').textContent = data.recipient;
     $('expiry').textContent = `This request expires in ${data.expiresInMin} minutes.`;
     $('copy-amount').onclick = () => navigator.clipboard.writeText(data.amount);
-    $('copy-addr').onclick = () => navigator.clipboard.writeText(data.address);
+    $('copy-addr').onclick = () => navigator.clipboard.writeText(data.recipient);
 
-    if (chain === 'eth' && window.ethereum) {
+    // Browser-wallet one-click for Ethereum assets (native + ERC-20 USDC)
+    if (data.wallet && window.ethereum) {
       $('mm-row').classList.remove('hidden');
       $('metamask').onclick = async () => {
         $('err2').textContent = '';
         try {
           const [from] = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          await window.ethereum.request({
-            method: 'eth_sendTransaction',
-            params: [{ from, to: data.address, value: '0x' + BigInt(data.amountBase).toString(16) }],
-          });
+          const tx = data.wallet.kind === 'erc20'
+            ? { from, to: data.wallet.to, data: data.wallet.data }
+            : { from, to: data.wallet.to, value: data.wallet.valueHex };
+          await window.ethereum.request({ method: 'eth_sendTransaction', params: [tx] });
         } catch (e) { $('err2').textContent = e?.message || 'Wallet error'; }
       };
+    } else {
+      $('mm-row').classList.add('hidden');
     }
 
     const frames = ['◐', '◓', '◑', '◒'];
