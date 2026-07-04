@@ -1,0 +1,33 @@
+# One-command deploy: `docker compose up -d`
+# Caddy terminates TLS (auto Let's Encrypt cert for $DOMAIN) and proxies to the app.
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      - PORT=3000
+    expose:
+      - "3000"
+    volumes:
+      - tipfall-data:/app/data   # keeps the donation ledger across restarts
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # persisted certificates
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  tipfall-data:
+  caddy-data:
+  caddy-config:

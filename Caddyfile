@@ -1,0 +1,7 @@
+# Caddy fetches and renews a Let's Encrypt certificate automatically.
+# $DOMAIN comes from the .env file (e.g. tips.herchannel.com).
+# WebSocket upgrades (/ws) are proxied transparently.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:3000
+}
