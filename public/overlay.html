@@ -56,10 +56,18 @@
   };
 
   let settings = { sound: 'chime', tiers: [] };
+  let defaultColor = '#ff5fa2';
   async function loadSettings() {
     try {
       const s = await fetch(`/api/overlay-settings?key=${encodeURIComponent(key)}`).then(r => r.json());
       if (s && !s.error) settings = s;
+    } catch {}
+    try {
+      const t = await fetch('/api/theme').then(r => r.json());
+      if (t && !t.error) {
+        if (t.accent) defaultColor = t.accent;
+        if (t.pig) document.querySelectorAll('#alert .pig').forEach(p => p.textContent = t.pig);
+      }
     } catch {}
   }
   loadSettings();
@@ -103,8 +111,8 @@
     const a = queue.shift();
     const tier = tierFor(a.eur);
 
-    el.box.style.setProperty('--tier', tier?.color || '#ff5fa2');
-    el.box.style.setProperty('--glow', (tier?.color || '#ff5fa2') + '80');
+    el.box.style.setProperty('--tier', tier?.color || defaultColor);
+    el.box.style.setProperty('--glow', (tier?.color || defaultColor) + '80');
     if (tier?.gif) { el.gif.src = tier.gif; el.gif.classList.add('on'); }
     else { el.gif.classList.remove('on'); el.gif.removeAttribute('src'); }
 

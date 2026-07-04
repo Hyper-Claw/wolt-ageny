@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Goal Widget</title>
 <style>
+  :root { --accent: #ff5fa2; --accent2: #ff9ad0; }
   body { margin: 0; background: transparent; overflow: hidden;
          font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
   .wrap {
@@ -16,7 +17,7 @@
   .bar { position: relative; height: 22px; background: #1c0d16; border-radius: 11px; overflow: visible; border: 1px solid #4a2537; }
   .barclip { position: absolute; inset: 0; border-radius: 11px; overflow: hidden; }
   .fill { height: 100%; width: 0; border-radius: 11px;
-          background: linear-gradient(90deg, #ff5fa2, #ff9ad0, #4be3a0);
+          background: linear-gradient(90deg, var(--accent), var(--accent2), #4be3a0);
           transition: width .8s cubic-bezier(.2,.8,.2,1); }
   /* piggy that rides along the end of the bar */
   .runner { position: absolute; top: 50%; transform: translate(-50%,-50%); font-size: 1.5rem;
@@ -27,7 +28,7 @@
   .top { margin-top: 14px; }
   .top h4 { margin: 0 0 6px; font-size: .8rem; color: #e0a8c6; text-transform: uppercase; letter-spacing: .05em; }
   .donor { display: flex; justify-content: space-between; font-size: .95rem; padding: 3px 0; }
-  .donor .rank { color: #ff5fa2; margin-right: 6px; }
+  .donor .rank { color: var(--accent); margin-right: 6px; }
   .donor .amt { color: #4be3a0; }
   .hidden { display: none; }
 </style>
@@ -50,12 +51,24 @@
   const showTop = !params.has('nolist');
   const $ = (id) => document.getElementById(id);
 
+  let pig = '🐷';
+  (async () => {
+    try {
+      const t = await fetch('/api/theme').then(r => r.json());
+      if (t && !t.error) {
+        if (t.pig) { pig = t.pig; $('runner').textContent = pig; }
+        if (t.accent) document.documentElement.style.setProperty('--accent', t.accent);
+        if (t.accent2) document.documentElement.style.setProperty('--accent2', t.accent2);
+      }
+    } catch {}
+  })();
+
   async function refresh() {
     let s;
     try { s = await fetch(`/api/stats?key=${encodeURIComponent(key)}`).then(r => r.json()); } catch { return; }
     if (!s || s.error) return;
 
-    $('title').textContent = `🐷 ${s.goalTitle || 'Stream Goal'}`;
+    $('title').textContent = `${pig} ${s.goalTitle || 'Stream Goal'}`;
     $('raised').textContent = `€${s.totalEur.toLocaleString()}`;
     let pct;
     if (s.goalEur > 0) {

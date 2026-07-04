@@ -40,6 +40,24 @@ function getSettings() {
   catch { return { ...DEFAULT_SETTINGS }; }
 }
 
+// -------------------------------------------------------- look & feel theme
+const DEFAULT_THEME = {
+  title: `${config.streamerName === 'the streamer' ? 'Crypto' : config.streamerName}'s Tip Jar`,
+  subtitle: 'Drop a coin in the piggy bank — your name and message pop up live on stream. 💕',
+  pig: '🐷',            // the emoji used everywhere piggies appear
+  accent: '#ff5fa2',    // main pink
+  accent2: '#ff9ad0',   // light pink
+  pigCount: 12,         // floating pigs on the donation page
+  speed: 1,             // animation speed multiplier (higher = faster)
+};
+
+function getTheme() {
+  const raw = getState('theme');
+  if (!raw) return { ...DEFAULT_THEME };
+  try { return { ...DEFAULT_THEME, ...JSON.parse(raw) }; }
+  catch { return { ...DEFAULT_THEME }; }
+}
+
 // ---------------------------------------------------------------- overlay ws
 const wss = new WebSocketServer({ noServer: true });
 
@@ -160,6 +178,9 @@ function overlayAuth(req, res, next) {
 
 app.get('/api/overlay-settings', overlayAuth, (_req, res) => res.json(getSettings()));
 
+// Theme is cosmetic and the donation page is public, so this read needs no key.
+app.get('/api/theme', (_req, res) => res.json(getTheme()));
+
 app.get('/api/stats', overlayAuth, (_req, res) => {
   const s = getSettings();
   const { total, n } = totalEur();
@@ -194,6 +215,22 @@ app.post('/api/overlay-settings', adminAuth, (req, res) => {
   };
   setState('overlaySettings', JSON.stringify(clean));
   res.json({ ok: true, settings: clean });
+});
+
+app.post('/api/theme', adminAuth, (req, res) => {
+  const b = req.body ?? {};
+  const hex = (v, dflt) => (/^#[0-9a-fA-F]{6}$/.test(String(v ?? '')) ? v : dflt);
+  const clean = {
+    title: String(b.title ?? DEFAULT_THEME.title).slice(0, 60) || DEFAULT_THEME.title,
+    subtitle: String(b.subtitle ?? DEFAULT_THEME.subtitle).slice(0, 160),
+    pig: (String(b.pig ?? '').slice(0, 8)) || DEFAULT_THEME.pig,
+    accent: hex(b.accent, DEFAULT_THEME.accent),
+    accent2: hex(b.accent2, DEFAULT_THEME.accent2),
+    pigCount: Math.max(0, Math.min(40, Math.round(Number(b.pigCount)) || 0)),
+    speed: Math.max(0.2, Math.min(4, Number(b.speed) || 1)),
+  };
+  setState('theme', JSON.stringify(clean));
+  res.json({ ok: true, theme: clean });
 });
 
 app.post('/api/test-alert', adminAuth, (req, res) => {

@@ -59,6 +59,29 @@
 </div>
 
 <div class="card">
+  <h2>Look &amp; feel <small>— the donation page + overlays</small></h2>
+  <div class="grid">
+    <div><label>Page title</label><input id="thTitle" placeholder="Cyma's Tip Jar"></div>
+    <div><label>Piggy emoji (any emoji)</label><input id="thPig" maxlength="8" placeholder="🐷"></div>
+  </div>
+  <label>Subtitle</label>
+  <input id="thSub" placeholder="Drop a coin in the piggy bank — pops up live on stream 💕">
+  <div class="grid">
+    <div><label>Main color</label><input id="thAccent" type="color" value="#ff5fa2" style="height:44px;padding:4px"></div>
+    <div><label>Light color</label><input id="thAccent2" type="color" value="#ff9ad0" style="height:44px;padding:4px"></div>
+  </div>
+  <div class="grid">
+    <div><label>Floating piggies: <span id="thCountVal">12</span></label>
+      <input id="thCount" type="range" min="0" max="40" value="12"></div>
+    <div><label>Animation speed: <span id="thSpeedVal">1</span>×</label>
+      <input id="thSpeed" type="range" min="0.2" max="4" step="0.1" value="1"></div>
+  </div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn primary" id="saveTheme">Save look &amp; feel</button>
+  </div>
+</div>
+
+<div class="card">
   <h2>Fundraising goal</h2>
   <div class="grid">
     <div><label>Goal title</label><input id="goalTitle" placeholder="New PC Goal"></div>
@@ -144,6 +167,43 @@
     });
   }
   $('addTier').onclick = () => { tiers.push({ minEur:10, color:'', gif:'', sound:'' }); renderTiers(); };
+
+  // --- theme (look & feel) ---
+  $('thCount').oninput = () => $('thCountVal').textContent = $('thCount').value;
+  $('thSpeed').oninput = () => $('thSpeedVal').textContent = $('thSpeed').value;
+
+  async function loadTheme() {
+    try {
+      const t = await fetch('/api/theme').then(r => r.json());
+      if (t && !t.error) {
+        $('thTitle').value = t.title || '';
+        $('thSub').value = t.subtitle || '';
+        $('thPig').value = t.pig || '🐷';
+        if (t.accent) $('thAccent').value = t.accent;
+        if (t.accent2) $('thAccent2').value = t.accent2;
+        $('thCount').value = t.pigCount ?? 12; $('thCountVal').textContent = t.pigCount ?? 12;
+        $('thSpeed').value = t.speed ?? 1; $('thSpeedVal').textContent = t.speed ?? 1;
+      }
+    } catch {}
+  }
+  loadTheme();
+
+  $('saveTheme').onclick = async () => {
+    const res = await fetch('/api/theme', {
+      method:'POST',
+      headers:{ 'content-type':'application/json', 'x-admin-key': $('adminKey').value.trim() },
+      body: JSON.stringify({
+        title: $('thTitle').value.trim(),
+        subtitle: $('thSub').value.trim(),
+        pig: $('thPig').value.trim(),
+        accent: $('thAccent').value,
+        accent2: $('thAccent2').value,
+        pigCount: Number($('thCount').value),
+        speed: Number($('thSpeed').value),
+      }),
+    });
+    setStatus(res.ok ? '✔ Look & feel saved — refresh the donation page to see it.' : '✗ Save failed (check admin key).', res.ok);
+  };
 
   // --- URLs ---
   function updateUrls() {

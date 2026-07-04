@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cyma's Tip Jar 🐷</title>
+<title>Tip Jar 🐷</title>
 <style>
   :root {
     --bg: #1a0e15; --card: #26121d; --ink: #ffeef6; --muted: #e0a8c6;
@@ -98,7 +98,6 @@
   }
   .row button:hover { border-color: var(--accent); }
   .paid { text-align: center; padding: 24px 0; }
-  .paid .big { font-size: 3rem; }
   .paid .celebrate span { display: inline-block; font-size: 2.4rem; animation: hop .6s ease-in-out infinite; }
   .paid .celebrate span:nth-child(2) { animation-delay: .15s; }
   .paid .celebrate span:nth-child(3) { animation-delay: .3s; }
@@ -111,8 +110,8 @@
 
 <div class="card">
   <div id="step-form">
-    <h1>Cyma's Tip Jar <span class="title-pig">🐷</span></h1>
-    <p class="sub">Drop a coin in the piggy bank — your name and message pop up live on stream. 💕</p>
+    <h1><span id="jarTitle">Tip Jar</span> <span class="title-pig" id="titlePig">🐷</span></h1>
+    <p class="sub" id="jarSub">Drop a coin in the piggy bank — your name and message pop up live on stream. 💕</p>
 
     <label>Pay with</label>
     <div class="assets" id="assets"></div>
@@ -127,12 +126,12 @@
     <label>Message (optional)</label>
     <textarea id="message" maxlength="200" placeholder="oink oink! 🐽"></textarea>
 
-    <button class="go" id="go">Feed the piggy <span class="btn-pig">🐷</span></button>
+    <button class="go" id="go">Feed the piggy <span class="btn-pig" id="btnPig">🐷</span></button>
     <div class="err" id="err"></div>
   </div>
 
   <div id="step-pay" class="pay hidden">
-    <h1>Almost there! <span class="title-pig">🐖</span></h1>
+    <h1>Almost there! <span class="title-pig" id="payPig">🐖</span></h1>
     <p class="hint">Send <b>exactly</b> this amount — it's how we match the tip to your name:</p>
     <div class="exact" id="exact"></div>
     <img id="qr" alt="payment QR" width="260" height="260">
@@ -150,7 +149,7 @@
   </div>
 
   <div id="step-paid" class="paid hidden">
-    <div class="celebrate"><span>🐷</span><span>🎉</span><span>🐷</span></div>
+    <div class="celebrate"><span id="celebPig1">🐷</span><span>🎉</span><span id="celebPig2">🐷</span></div>
     <h2>Coin received!</h2>
     <p class="hint">Your tip is popping up on stream right now. Thank you! 💕</p>
   </div>
@@ -160,16 +159,26 @@
 (async () => {
   const $ = (id) => document.getElementById(id);
 
-  // scatter floating piggies
+  // --- apply the configurable theme (title, pig, colors, animation) ---
+  const theme = await fetch('/api/theme').then(r => r.json()).catch(() => ({}));
+  const pig = theme.pig || '🐷';
+  const speed = theme.speed || 1;
+  if (theme.accent) document.documentElement.style.setProperty('--accent', theme.accent);
+  if (theme.accent2) document.documentElement.style.setProperty('--accent2', theme.accent2);
+  if (theme.title) { $('jarTitle').textContent = theme.title; document.title = theme.title; }
+  if (theme.subtitle) $('jarSub').textContent = theme.subtitle;
+  for (const id of ['titlePig', 'btnPig', 'payPig', 'celebPig1', 'celebPig2']) $(id).textContent = pig;
+
+  // floating background piggies (count + speed from theme)
   (() => {
-    const pigs = ['🐷', '🐖', '🐽'];
     const wrap = $('piggies');
-    for (let i = 0; i < 12; i++) {
+    const count = Number.isFinite(theme.pigCount) ? theme.pigCount : 12;
+    for (let i = 0; i < count; i++) {
       const s = document.createElement('span');
-      s.textContent = pigs[i % pigs.length];
+      s.textContent = pig;
       s.style.left = Math.random() * 100 + 'vw';
       s.style.fontSize = (1.3 + Math.random() * 1.8) + 'rem';
-      s.style.animationDuration = (11 + Math.random() * 12) + 's';
+      s.style.animationDuration = ((11 + Math.random() * 12) / speed) + 's';
       s.style.animationDelay = (-Math.random() * 20) + 's';
       wrap.appendChild(s);
     }
@@ -183,13 +192,12 @@
   const usdPrices = await fetch('/api/prices').then(r => r.json()).catch(() => ({}));
   const PRESET_USD = [10, 25, 50, 100];
 
-  // Turn a USD amount into a tidy coin amount for the selected asset.
   function usdToCoin(usd, id) {
     const price = usdPrices[id];
-    if (!price) return null;                 // no price → can't convert
+    if (!price) return null;
     const coin = usd / price;
-    if (coin >= 1) return (Math.round(coin * 100) / 100).toString();       // 2 dp
-    return coin.toPrecision(4).replace(/\.?0+$/, '');                      // small amounts
+    if (coin >= 1) return (Math.round(coin * 100) / 100).toString();
+    return coin.toPrecision(4).replace(/\.?0+$/, '');
   }
 
   let asset = assetIds[0];
@@ -215,7 +223,6 @@
         btn.title = `${coin} ${a.symbol}`;
         btn.onclick = () => { $('amount').value = coin; };
       } else {
-        // price unavailable → fall back to the asset's coin-unit presets
         const fallback = (a.presets ?? [])[PRESET_USD.indexOf(usd)] ?? String(usd);
         btn.textContent = fallback;
         btn.onclick = () => { $('amount').value = fallback; };
