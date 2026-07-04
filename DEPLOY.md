@@ -128,7 +128,7 @@ Two kinds of customization:
   docker compose up -d --build
   ```
 
-## Updating later
+## Updating later (manual)
 
 ```bash
 cd wolt-ageny
@@ -138,6 +138,71 @@ docker compose up -d --build
 
 The donation ledger (`data/`) is kept in a Docker volume, so it survives
 updates and restarts.
+
+---
+
+## Automatic deploys (recommended — no more SSH)
+
+Set this up once and you'll never have to touch the server again. After it's
+wired up:
+
+- Editing a page on **github.com** (pencil icon → commit) redeploys it live.
+- Or click **Actions → Deploy to VPS → Run workflow** for a manual redeploy.
+
+It works by giving GitHub a key to SSH in and run the update for you.
+
+### One-time setup
+
+**1. On your own computer, make a deploy key** (a dedicated SSH key just for
+this — no passphrase):
+
+```bash
+ssh-keygen -t ed25519 -f tipfall_deploy -N "" -C "github-deploy"
+```
+
+That creates two files: `tipfall_deploy` (private) and `tipfall_deploy.pub`
+(public).
+
+**2. Authorize the public key on the server.** Copy the contents of
+`tipfall_deploy.pub` and, on the VPS:
+
+```bash
+cat >> ~/.ssh/authorized_keys < tipfall_deploy.pub   # or paste it in with nano
+```
+
+(If you're logging in as `root`, that's `/root/.ssh/authorized_keys`.)
+
+**3. Add three secrets to the GitHub repo.** Go to the repo on github.com →
+**Settings → Secrets and variables → Actions → New repository secret**, and add:
+
+| Name | Value |
+|------|-------|
+| `DEPLOY_HOST` | your server's IP address |
+| `DEPLOY_USER` | `root` (or your deploy user) |
+| `DEPLOY_SSH_KEY` | the **entire** contents of the **private** `tipfall_deploy` file |
+
+That's it. The next push to `main` (or a manual run) deploys automatically.
+Watch it under the repo's **Actions** tab.
+
+> Keep the private key secret — it only ever lives in the GitHub secret and on
+> your computer, never in the repo. Delete your local copy once it's pasted in
+> if you like; you can always generate a new one.
+
+> ⚠️ Once auto-deploy is on, make edits through **GitHub** (not by editing
+> files directly on the server), so the server's `git pull` never hits a
+> conflict.
+
+---
+
+## Surviving reboots
+
+The containers are set to `restart: unless-stopped`, and Docker's installer
+enables the Docker service on boot. So if the server reboots (or crashes),
+everything comes back on its own. To be certain Docker starts at boot:
+
+```bash
+sudo systemctl enable docker
+```
 
 ## Handy commands
 
