@@ -3,61 +3,88 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Support the stream 💜</title>
+<title>Cyma's Tip Jar 🐷</title>
 <style>
   :root {
-    --bg: #0f0f14; --card: #1a1a23; --ink: #ececf1; --muted: #9a9aad;
-    --accent: #a970ff; --accent2: #7c4dff; --ok: #3ddc84; --err: #ff6b6b;
-    --line: #2c2c3a;
+    --bg: #1a0e15; --card: #26121d; --ink: #ffeef6; --muted: #e0a8c6;
+    --accent: #ff5fa2; --accent2: #ff9ad0; --ok: #4be3a0; --err: #ff7a8a;
+    --line: #4a2537;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: radial-gradient(1200px 600px at 50% -10%, #221a33, var(--bg));
+    background: radial-gradient(1100px 620px at 50% -8%, #4a1533, var(--bg));
     color: var(--ink); min-height: 100vh; display: grid; place-items: start center;
-    padding: 40px 16px;
+    padding: 40px 16px; overflow-x: hidden;
   }
+
+  /* --- floating background piggies --- */
+  .piggies { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .piggies span {
+    position: absolute; bottom: -60px; font-size: 2rem; opacity: 0;
+    animation: floatUp linear infinite;
+    filter: drop-shadow(0 4px 10px rgba(255,95,162,.35));
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 0; }
+    10%  { opacity: .8; }
+    50%  { transform: translateY(-52vh) rotate(12deg) scale(1.08); }
+    90%  { opacity: .8; }
+    100% { transform: translateY(-108vh) rotate(-10deg) scale(1); opacity: 0; }
+  }
+
   .card {
+    position: relative; z-index: 1;
     width: 100%; max-width: 460px; background: var(--card);
-    border: 1px solid var(--line); border-radius: 16px; padding: 28px;
-    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+    border: 1px solid var(--line); border-radius: 20px; padding: 28px;
+    box-shadow: 0 20px 60px rgba(120,10,60,.45), 0 0 0 1px rgba(255,95,162,.08) inset;
   }
-  h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  h1 { margin: 0 0 4px; font-size: 1.55rem; }
+  .title-pig { display: inline-block; animation: wiggle 2.2s ease-in-out infinite; transform-origin: 60% 80%; }
   .sub { color: var(--muted); margin: 0 0 22px; font-size: .95rem; }
   label { display: block; font-size: .85rem; color: var(--muted); margin: 14px 0 6px; }
   input, textarea {
-    width: 100%; background: #12121a; color: var(--ink);
+    width: 100%; background: #1c0d16; color: var(--ink);
     border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px;
     font-size: 1rem; font-family: inherit;
   }
-  input:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  input::placeholder, textarea::placeholder { color: #9a6480; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,95,162,.15); }
   textarea { resize: vertical; min-height: 64px; }
   .assets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .asset {
     padding: 12px; border-radius: 10px; border: 1px solid var(--line);
-    background: #12121a; color: var(--ink); font-size: .95rem; cursor: pointer;
-    transition: border-color .15s, background .15s; text-align: center;
+    background: #1c0d16; color: var(--ink); font-size: .95rem; cursor: pointer;
+    transition: border-color .15s, background .15s, transform .1s; text-align: center;
   }
-  .asset.active { border-color: var(--accent); background: #221a33; }
+  .asset:hover { transform: translateY(-1px); }
+  .asset.active { border-color: var(--accent); background: #3a1528; box-shadow: 0 0 14px rgba(255,95,162,.25); }
   .amounts { display: flex; gap: 8px; margin-top: 6px; }
   .amounts button {
     flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid var(--line);
-    background: #12121a; color: var(--muted); cursor: pointer; font-size: .9rem;
+    background: #1c0d16; color: var(--muted); cursor: pointer; font-size: .9rem; transition: .15s;
   }
   .amounts button:hover { border-color: var(--accent); color: var(--ink); }
   .go {
-    width: 100%; margin-top: 22px; padding: 14px; border: none; border-radius: 12px;
+    position: relative; width: 100%; margin-top: 22px; padding: 14px; border: none; border-radius: 12px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white; font-size: 1.05rem; font-weight: 600; cursor: pointer;
+    color: #3a0a22; font-size: 1.05rem; font-weight: 800; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(255,95,162,.35); transition: transform .1s, box-shadow .2s;
   }
+  .go:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(255,95,162,.5); }
+  .go:hover .btn-pig { animation: hop .5s ease-in-out infinite; }
   .go:disabled { opacity: .5; cursor: default; }
+  .btn-pig { display: inline-block; margin-left: 6px; }
+  @keyframes hop { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-5px) rotate(8deg); } }
+  @keyframes wiggle { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+
   .err { color: var(--err); font-size: .9rem; margin-top: 10px; min-height: 1.2em; }
 
   .pay { text-align: center; }
   .pay img { border-radius: 12px; background: white; padding: 6px; }
   .exact {
     font-family: ui-monospace, monospace; font-size: 1.15rem; margin: 14px 0 4px;
-    color: var(--accent); word-break: break-all;
+    color: var(--accent2); word-break: break-all;
   }
   .addr {
     font-family: ui-monospace, monospace; font-size: .78rem; color: var(--muted);
@@ -67,20 +94,25 @@
   .row { display: flex; gap: 10px; margin-top: 12px; }
   .row button {
     flex: 1; padding: 11px; border-radius: 10px; border: 1px solid var(--line);
-    background: #12121a; color: var(--ink); cursor: pointer; font-size: .95rem;
+    background: #1c0d16; color: var(--ink); cursor: pointer; font-size: .95rem; transition: .15s;
   }
   .row button:hover { border-color: var(--accent); }
-  .paid { text-align: center; padding: 30px 0; }
+  .paid { text-align: center; padding: 24px 0; }
   .paid .big { font-size: 3rem; }
+  .paid .celebrate span { display: inline-block; font-size: 2.4rem; animation: hop .6s ease-in-out infinite; }
+  .paid .celebrate span:nth-child(2) { animation-delay: .15s; }
+  .paid .celebrate span:nth-child(3) { animation-delay: .3s; }
   .paid h2 { color: var(--ok); margin: 10px 0 6px; }
   .hidden { display: none; }
 </style>
 </head>
 <body>
+<div class="piggies" id="piggies" aria-hidden="true"></div>
+
 <div class="card">
   <div id="step-form">
-    <h1>Support the stream 💜</h1>
-    <p class="sub">Tip with crypto — your name and message pop up live on stream.</p>
+    <h1>Cyma's Tip Jar <span class="title-pig">🐷</span></h1>
+    <p class="sub">Drop a coin in the piggy bank — your name and message pop up live on stream. 💕</p>
 
     <label>Pay with</label>
     <div class="assets" id="assets"></div>
@@ -93,14 +125,14 @@
     <input id="name" maxlength="40" placeholder="Anonymous">
 
     <label>Message (optional)</label>
-    <textarea id="message" maxlength="200" placeholder="gg!"></textarea>
+    <textarea id="message" maxlength="200" placeholder="oink oink! 🐽"></textarea>
 
-    <button class="go" id="go">Continue →</button>
+    <button class="go" id="go">Feed the piggy <span class="btn-pig">🐷</span></button>
     <div class="err" id="err"></div>
   </div>
 
   <div id="step-pay" class="pay hidden">
-    <h1>Almost there!</h1>
+    <h1>Almost there! <span class="title-pig">🐖</span></h1>
     <p class="hint">Send <b>exactly</b> this amount — it's how we match the tip to your name:</p>
     <div class="exact" id="exact"></div>
     <img id="qr" alt="payment QR" width="260" height="260">
@@ -113,23 +145,52 @@
       <button id="metamask">🦊 Pay with MetaMask</button>
     </div>
     <p class="hint" id="expiry"></p>
-    <p class="hint">Waiting for payment… <span id="spin">◐</span></p>
+    <p class="hint">Waiting for your coin… <span id="spin">◐</span></p>
     <div class="err" id="err2"></div>
   </div>
 
   <div id="step-paid" class="paid hidden">
-    <div class="big">🎉</div>
-    <h2>Payment received!</h2>
-    <p class="hint">Your tip is popping up on stream right now. Thank you!</p>
+    <div class="celebrate"><span>🐷</span><span>🎉</span><span>🐷</span></div>
+    <h2>Coin received!</h2>
+    <p class="hint">Your tip is popping up on stream right now. Thank you! 💕</p>
   </div>
 </div>
 
 <script>
 (async () => {
   const $ = (id) => document.getElementById(id);
+
+  // scatter floating piggies
+  (() => {
+    const pigs = ['🐷', '🐖', '🐽'];
+    const wrap = $('piggies');
+    for (let i = 0; i < 12; i++) {
+      const s = document.createElement('span');
+      s.textContent = pigs[i % pigs.length];
+      s.style.left = Math.random() * 100 + 'vw';
+      s.style.fontSize = (1.3 + Math.random() * 1.8) + 'rem';
+      s.style.animationDuration = (11 + Math.random() * 12) + 's';
+      s.style.animationDelay = (-Math.random() * 20) + 's';
+      wrap.appendChild(s);
+    }
+  })();
+
   const cfg = await fetch('/api/config').then(r => r.json());
   const assetIds = Object.keys(cfg.assets);
   if (!assetIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
+
+  // Live USD price per coin, for the dollar preset buttons.
+  const usdPrices = await fetch('/api/prices').then(r => r.json()).catch(() => ({}));
+  const PRESET_USD = [10, 25, 50, 100];
+
+  // Turn a USD amount into a tidy coin amount for the selected asset.
+  function usdToCoin(usd, id) {
+    const price = usdPrices[id];
+    if (!price) return null;                 // no price → can't convert
+    const coin = usd / price;
+    if (coin >= 1) return (Math.round(coin * 100) / 100).toString();       // 2 dp
+    return coin.toPrecision(4).replace(/\.?0+$/, '');                      // small amounts
+  }
 
   let asset = assetIds[0];
 
@@ -146,10 +207,19 @@
     const a = cfg.assets[asset];
     $('symbol').textContent = a.symbol;
     $('presets').innerHTML = '';
-    for (const p of a.presets ?? []) {
+    for (const usd of PRESET_USD) {
+      const coin = usdToCoin(usd, asset);
       const btn = document.createElement('button');
-      btn.textContent = p;
-      btn.onclick = () => { $('amount').value = p; };
+      if (coin) {
+        btn.textContent = `$${usd}`;
+        btn.title = `${coin} ${a.symbol}`;
+        btn.onclick = () => { $('amount').value = coin; };
+      } else {
+        // price unavailable → fall back to the asset's coin-unit presets
+        const fallback = (a.presets ?? [])[PRESET_USD.indexOf(usd)] ?? String(usd);
+        btn.textContent = fallback;
+        btn.onclick = () => { $('amount').value = fallback; };
+      }
       $('presets').appendChild(btn);
     }
   }

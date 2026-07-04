@@ -14,7 +14,7 @@ import {
 } from './src/db.js';
 import { watchEth } from './src/eth.js';
 import { watchSol } from './src/sol.js';
-import { getPrices, eurValue } from './src/prices.js';
+import { getPrices, eurValue, usdPrice } from './src/prices.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -96,6 +96,15 @@ app.get('/api/config', (_req, res) => {
       }]),
     ),
   });
+});
+
+// Current USD price per coin, per asset — used for the $10/$25/$50/$100 preset
+// buttons (converted to the coin amount client-side). USDC ≈ 1.
+app.get('/api/prices', async (_req, res) => {
+  const prices = await getPrices();
+  res.json(Object.fromEntries(
+    Object.values(ASSETS).map((a) => [a.id, usdPrice(a, prices)]),
+  ));
 });
 
 app.post('/api/donate', async (req, res) => {

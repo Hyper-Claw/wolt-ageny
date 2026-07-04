@@ -11,22 +11,28 @@
     position: absolute; top: 40px; left: 50%; transform: translateX(-50%) translateY(-30px);
     opacity: 0; transition: opacity .4s ease, transform .4s ease;
     min-width: 340px; max-width: 560px;
-    background: linear-gradient(135deg, rgba(26,16,46,.95), rgba(18,18,26,.95));
-    border: 2px solid var(--tier, #a970ff); border-radius: 18px; padding: 20px 28px;
-    box-shadow: 0 0 40px var(--glow, rgba(169,112,255,.5)); text-align: center; color: #fff;
+    background: linear-gradient(135deg, rgba(58,15,40,.96), rgba(26,14,21,.96));
+    border: 2px solid var(--tier, #ff5fa2); border-radius: 18px; padding: 20px 28px;
+    box-shadow: 0 0 40px var(--glow, rgba(255,95,162,.5)); text-align: center; color: #fff;
   }
   #alert.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  /* piggies that bounce on either side of the alert */
+  #alert .pig { position: absolute; top: 50%; font-size: 2rem; animation: pigHop .6s ease-in-out infinite; }
+  #alert .pig.l { left: -14px; } #alert .pig.r { right: -14px; animation-delay: .2s; }
+  @keyframes pigHop { 0%,100% { transform: translateY(-60%) rotate(-6deg); } 50% { transform: translateY(-40%) rotate(6deg); } }
   #gif { max-width: 220px; max-height: 160px; margin-bottom: 10px; border-radius: 10px; display: none; }
   #gif.on { display: inline-block; }
   .head { font-size: 1.6rem; font-weight: 800; }
-  .head .name { color: var(--tier, #a970ff); }
-  .head .amt { color: #3ddc84; }
-  .eur { color: #9a9aad; font-size: 1rem; margin-top: 2px; }
+  .head .name { color: var(--tier, #ff5fa2); }
+  .head .amt { color: #4be3a0; }
+  .eur { color: #e0a8c6; font-size: 1rem; margin-top: 2px; }
   .msg { margin-top: 10px; font-size: 1.15rem; line-height: 1.4; word-wrap: break-word; }
 </style>
 </head>
 <body>
 <div id="alert">
+  <span class="pig l">🐷</span>
+  <span class="pig r">🐷</span>
   <img id="gif" alt="">
   <div class="head"><span class="name" id="name"></span> tipped <span class="amt" id="amt"></span></div>
   <div class="eur" id="eur"></div>
@@ -97,8 +103,8 @@
     const a = queue.shift();
     const tier = tierFor(a.eur);
 
-    el.box.style.setProperty('--tier', tier?.color || '#a970ff');
-    el.box.style.setProperty('--glow', (tier?.color || '#a970ff') + '80');
+    el.box.style.setProperty('--tier', tier?.color || '#ff5fa2');
+    el.box.style.setProperty('--glow', (tier?.color || '#ff5fa2') + '80');
     if (tier?.gif) { el.gif.src = tier.gif; el.gif.classList.add('on'); }
     else { el.gif.classList.remove('on'); el.gif.removeAttribute('src'); }
 

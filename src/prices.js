@@ -1,5 +1,6 @@
-// EUR prices for pretty alert amounts and goal tracking. Cosmetic — donations
-// still work if this API is unreachable (EUR just shows as unknown).
+// EUR + USD prices for pretty alert amounts, goal tracking, and dollar-based
+// preset buttons. Cosmetic/best-effort — donations still work if this API is
+// unreachable (EUR shows blank; presets fall back to coin amounts).
 let cache = { at: 0, byId: {} };
 
 const IDS = ['ethereum', 'solana', 'usd-coin'];
@@ -11,7 +12,7 @@ const STATIC = (() => {
   const byId = {};
   for (const pair of process.env.PRICES_EUR.split(',')) {
     const [id, v] = pair.split(':');
-    if (id && v) byId[id.trim()] = Number(v);
+    if (id && v) byId[id.trim()] = { eur: Number(v), usd: Number(v) };
   }
   return byId;
 })();
@@ -21,14 +22,17 @@ export async function getPrices() {
   if (Date.now() - cache.at < 5 * 60_000) return cache.byId;
   try {
     const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${IDS.join(',')}&vs_currencies=eur`,
+      `https://api.coingecko.com/api/v3/simple/price?ids=${IDS.join(',')}&vs_currencies=eur,usd`,
       { signal: AbortSignal.timeout(5000) },
     );
     if (res.ok) {
       const json = await res.json();
       cache = {
         at: Date.now(),
-        byId: Object.fromEntries(IDS.map((id) => [id, json[id]?.eur ?? null])),
+        byId: Object.fromEntries(IDS.map((id) => [id, {
+          eur: json[id]?.eur ?? null,
+          usd: json[id]?.usd ?? null,
+        }])),
       };
     }
   } catch {
@@ -39,7 +43,12 @@ export async function getPrices() {
 
 // eurValue(asset, displayAmount, prices) -> number | null
 export function eurValue(asset, displayAmount, prices) {
-  const price = prices[asset.coingecko];
+  const price = prices[asset.coingecko]?.eur;
   if (price == null) return null;
   return Math.round(Number(displayAmount) * price * 100) / 100;
+}
+
+// usdPrice(asset, prices) -> number | null  (price of 1 coin in USD)
+export function usdPrice(asset, prices) {
+  return prices[asset.coingecko]?.usd ?? null;
 }

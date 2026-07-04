@@ -7,30 +7,35 @@
   body { margin: 0; background: transparent; overflow: hidden;
          font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
   .wrap {
+    position: relative;
     width: 380px; padding: 16px 18px; border-radius: 16px;
-    background: linear-gradient(135deg, rgba(26,16,46,.92), rgba(18,18,26,.92));
-    border: 1px solid #2c2c3a; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    background: linear-gradient(135deg, rgba(58,15,40,.94), rgba(26,14,21,.94));
+    border: 1px solid #4a2537; box-shadow: 0 8px 30px rgba(120,10,60,.4);
   }
   .title { font-weight: 800; font-size: 1.1rem; margin-bottom: 8px; }
-  .bar { height: 22px; background: #12121a; border-radius: 11px; overflow: hidden; border: 1px solid #2c2c3a; }
+  .bar { position: relative; height: 22px; background: #1c0d16; border-radius: 11px; overflow: visible; border: 1px solid #4a2537; }
+  .barclip { position: absolute; inset: 0; border-radius: 11px; overflow: hidden; }
   .fill { height: 100%; width: 0; border-radius: 11px;
-          background: linear-gradient(90deg, #7c4dff, #a970ff, #3ddc84);
+          background: linear-gradient(90deg, #ff5fa2, #ff9ad0, #4be3a0);
           transition: width .8s cubic-bezier(.2,.8,.2,1); }
-  .nums { display: flex; justify-content: space-between; margin-top: 6px; font-size: .95rem; }
-  .nums .raised { color: #3ddc84; font-weight: 700; }
-  .nums .goal { color: #9a9aad; }
+  /* piggy that rides along the end of the bar */
+  .runner { position: absolute; top: 50%; transform: translate(-50%,-50%); font-size: 1.5rem;
+            transition: left .8s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
+  .nums { display: flex; justify-content: space-between; margin-top: 8px; font-size: .95rem; }
+  .nums .raised { color: #4be3a0; font-weight: 700; }
+  .nums .goal { color: #e0a8c6; }
   .top { margin-top: 14px; }
-  .top h4 { margin: 0 0 6px; font-size: .8rem; color: #9a9aad; text-transform: uppercase; letter-spacing: .05em; }
+  .top h4 { margin: 0 0 6px; font-size: .8rem; color: #e0a8c6; text-transform: uppercase; letter-spacing: .05em; }
   .donor { display: flex; justify-content: space-between; font-size: .95rem; padding: 3px 0; }
-  .donor .rank { color: #a970ff; margin-right: 6px; }
-  .donor .amt { color: #3ddc84; }
+  .donor .rank { color: #ff5fa2; margin-right: 6px; }
+  .donor .amt { color: #4be3a0; }
   .hidden { display: none; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="title" id="title">Stream Goal</div>
-  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="title" id="title">🐷 Stream Goal</div>
+  <div class="bar"><div class="barclip"><div class="fill" id="fill"></div></div><span class="runner" id="runner" style="left:0">🐷</span></div>
   <div class="nums"><span class="raised" id="raised">€0</span><span class="goal" id="goal"></span></div>
   <div class="top hidden" id="topwrap">
     <h4>Top Supporters</h4>
@@ -50,15 +55,18 @@
     try { s = await fetch(`/api/stats?key=${encodeURIComponent(key)}`).then(r => r.json()); } catch { return; }
     if (!s || s.error) return;
 
-    $('title').textContent = s.goalTitle || 'Stream Goal';
+    $('title').textContent = `🐷 ${s.goalTitle || 'Stream Goal'}`;
     $('raised').textContent = `€${s.totalEur.toLocaleString()}`;
+    let pct;
     if (s.goalEur > 0) {
       $('goal').textContent = `/ €${s.goalEur.toLocaleString()}`;
-      $('fill').style.width = Math.min(100, (s.totalEur / s.goalEur) * 100) + '%';
+      pct = Math.min(100, (s.totalEur / s.goalEur) * 100);
     } else {
       $('goal').textContent = `${s.count} tip${s.count === 1 ? '' : 's'}`;
-      $('fill').style.width = s.totalEur > 0 ? '100%' : '0';
+      pct = s.totalEur > 0 ? 100 : 0;
     }
+    $('fill').style.width = pct + '%';
+    $('runner').style.left = pct + '%';   // piggy rides the end of the bar
 
     if (showTop && s.top?.length) {
       $('topwrap').classList.remove('hidden');
