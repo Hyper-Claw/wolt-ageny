@@ -278,6 +278,9 @@ app.post('/api/overlay-settings', adminAuth, async (req, res) => {
   res.json({ ok: true, settings: clean });
 });
 
+// Lets the customize page check a key before revealing anything.
+app.post('/api/verify-admin', adminAuth, (_req, res) => res.json({ ok: true }));
+
 // Reset goal progress for a fresh stream: raised → €0, goal → the base amount.
 app.post('/api/reset-goal', adminAuth, (_req, res) => {
   setState('goalBaseline', totalEur().total);        // everything so far no longer counts

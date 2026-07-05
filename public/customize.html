@@ -32,18 +32,25 @@
   .ok { color:var(--ok); } .err { color:#ff6b6b; }
   small { color:var(--muted); }
   hr { border:none; border-top:1px solid var(--line); margin:18px 0; }
+  .hidden { display:none; }
 </style>
 </head>
 <body>
 
 <div class="card">
   <h1>Tipfall — Customize 🎛️</h1>
-  <p class="sub">Set your alert sound, fundraising goal, and donation tiers. Changes save to the server and your OBS overlay picks them up automatically.</p>
+  <p class="sub">Enter your keys to unlock. Nothing is shown until a correct key is verified.</p>
   <label>Admin key <small>(the ADMIN_KEY from your .env)</small></label>
   <input id="adminKey" type="password" placeholder="paste ADMIN_KEY">
   <label>Overlay key <small>(the OVERLAY_KEY — used to build your OBS URLs)</small></label>
   <input id="overlayKey" type="password" placeholder="paste OVERLAY_KEY">
+  <div class="row" style="margin-top:14px">
+    <button class="btn primary" id="unlock">🔓 Unlock</button>
+  </div>
+  <div class="status" id="gateStatus"></div>
 </div>
+
+<div id="panel" class="hidden">
 
 <div class="card">
   <h2>Alert sound &amp; timing</h2>
@@ -116,10 +123,12 @@
 
 <div class="card">
   <h2>Your OBS browser-source URLs</h2>
-  <p class="sub">Paste your overlay key above, then add these as Browser Sources in OBS.</p>
+  <p class="sub">These are built from your overlay key. Add them as Browser Sources in OBS.</p>
   <label>Alerts</label><div class="urlbox" id="urlAlerts">—</div>
   <label>Goal bar</label><div class="urlbox" id="urlGoal">—</div>
 </div>
+
+</div><!-- /#panel -->
 
 <script>
 (() => {
@@ -259,7 +268,6 @@
       }
     } catch {}
   }
-  loadTheme();
 
   $('saveTheme').onclick = async () => {
     const res = await fetch('/api/theme', {
@@ -305,6 +313,24 @@
     } catch {}
   }
   $('overlayKey').addEventListener('change', load);
+
+  // --- lock gate: reveal the panel only after a correct admin key ---
+  function gate(msg, ok) { const el = $('gateStatus'); el.textContent = msg; el.className = 'status ' + (ok ? 'ok' : 'err'); }
+  async function unlock() {
+    const admin = $('adminKey').value.trim();
+    if (!admin) { gate('Enter your admin key.', false); return; }
+    let ok = false;
+    try { ok = (await fetch('/api/verify-admin', { method: 'POST', headers: { 'x-admin-key': admin } })).ok; } catch {}
+    if (!ok) { gate('Wrong admin key — try again.', false); return; }
+    gate('', true);
+    $('panel').classList.remove('hidden');
+    $('unlock').textContent = '🔓 Unlocked';
+    $('unlock').disabled = true;
+    updateUrls(); load(); loadTheme();
+  }
+  $('unlock').onclick = unlock;
+  $('adminKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock(); });
+  $('overlayKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock(); });
 
   function setStatus(msg, ok) { const el=$('status'); el.textContent=msg; el.className='status '+(ok?'ok':'err'); }
 
