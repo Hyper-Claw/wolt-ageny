@@ -15,7 +15,7 @@ import {
 } from './src/db.js';
 import { watchEvmChain } from './src/evm.js';
 import { watchSol } from './src/sol.js';
-import { getPrices, eurValue, usdPrice, eurPrice } from './src/prices.js';
+import { getPrices, eurValue } from './src/prices.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Uploaded alert sounds live in the persisted data volume and are served publicly.
@@ -53,7 +53,6 @@ const DEFAULT_THEME = {
   title: `${config.streamerName === 'the streamer' ? 'Crypto' : config.streamerName}'s Tip Jar`,
   subtitle: 'Drop a coin in the piggy bank — your name and message pop up live on stream. 💕',
   buttonText: 'Feed the piggy',   // the donate/submit button label
-  currency: 'USD',      // preset button currency: USD ($) or EUR (€)
   pig: '🐷',            // the emoji used everywhere piggies appear
   accent: '#ff5fa2',    // main pink
   accent2: '#ff9ad0',   // light pink
@@ -128,12 +127,12 @@ app.get('/api/config', (_req, res) => {
   });
 });
 
-// Current USD price per coin, per asset — used for the $10/$25/$50/$100 preset
-// buttons (converted to the coin amount client-side). USDC ≈ 1.
+// Price per coin in each supported fiat currency, per asset — the donation page
+// converts the preset buttons into the currency the tipper picks.
 app.get('/api/prices', async (_req, res) => {
   const prices = await getPrices();
   res.json(Object.fromEntries(
-    Object.values(ASSETS).map((a) => [a.id, { usd: usdPrice(a, prices), eur: eurPrice(a, prices) }]),
+    Object.values(ASSETS).map((a) => [a.id, prices[a.coingecko] || {}]),
   ));
 });
 
@@ -249,7 +248,6 @@ app.post('/api/theme', adminAuth, (req, res) => {
     title: String(b.title ?? DEFAULT_THEME.title).slice(0, 60) || DEFAULT_THEME.title,
     subtitle: String(b.subtitle ?? DEFAULT_THEME.subtitle).slice(0, 160),
     buttonText: String(b.buttonText ?? DEFAULT_THEME.buttonText).slice(0, 40) || DEFAULT_THEME.buttonText,
-    currency: b.currency === 'EUR' ? 'EUR' : 'USD',
     pig: (String(b.pig ?? '').slice(0, 8)) || DEFAULT_THEME.pig,
     accent: hex(b.accent, DEFAULT_THEME.accent),
     accent2: hex(b.accent2, DEFAULT_THEME.accent2),

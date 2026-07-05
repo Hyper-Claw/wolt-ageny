@@ -59,6 +59,8 @@
   }
   .asset:hover { transform: translateY(-1px); }
   .asset.active { border-color: var(--accent); background: #3a1528; box-shadow: 0 0 14px rgba(255,95,162,.25); }
+  .preset-head { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; font-size: .8rem; color: var(--muted); }
+  .preset-head select { width: auto; padding: 5px 8px; font-size: .85rem; background: #1c0d16; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; }
   .amounts { display: flex; gap: 8px; margin-top: 6px; }
   .amounts button {
     flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid var(--line);
@@ -118,6 +120,10 @@
 
     <label>Amount (<span id="symbol">ETH</span>)</label>
     <input id="amount" inputmode="decimal" placeholder="0.01">
+    <div class="preset-head">
+      <span>Quick amounts in</span>
+      <select id="currency" aria-label="Your currency"></select>
+    </div>
     <div class="amounts" id="presets"></div>
 
     <label>Your name (shown on stream)</label>
@@ -207,14 +213,35 @@
   if (!assetIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
   const usdcContracts = cfg.usdcContracts || {};
 
-  // Live prices per coin (USD + EUR), for the fiat preset buttons.
+  // Live prices per coin in several fiat currencies, so each tipper sees the
+  // suggested amounts in a currency they understand.
   const prices = await fetch('/api/prices').then(r => r.json()).catch(() => ({}));
   const PRESETS = [10, 25, 50, 100];
-  const fiat = theme.currency === 'EUR' ? 'eur' : 'usd';
-  const sym = fiat === 'eur' ? '€' : '$';
+  const CUR = { usd: '$', eur: '€', gbp: '£', cad: 'CA$', aud: 'A$' };
+
+  function guessCurrency() {
+    const l = (navigator.language || 'en').toLowerCase();
+    const eu = ['de','fr','es','it','nl','pt','fi','el','ga','et','lv','lt','sk','sl','mt'];
+    if (l.includes('gb')) return 'gbp';
+    if (l.endsWith('-ca') || l.includes('ca')) return 'cad';
+    if (l.endsWith('-au') || l.includes('au')) return 'aud';
+    if (l.includes('-us')) return 'usd';
+    if (eu.some(c => l === c || l.endsWith('-' + c) || l.startsWith(c + '-'))) return 'eur';
+    return 'usd';
+  }
+
+  let currency = guessCurrency();
+  // populate the picker
+  for (const c of Object.keys(CUR)) {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = `${CUR[c]} ${c.toUpperCase()}`;
+    if (c === currency) o.selected = true;
+    $('currency').appendChild(o);
+  }
+  $('currency').onchange = () => { currency = $('currency').value; render(); };
 
   function fiatToCoin(amount, id) {
-    const price = prices[id]?.[fiat];
+    const price = prices[id]?.[currency];
     if (!price) return null;
     const coin = amount / price;
     if (coin >= 1) return (Math.round(coin * 100) / 100).toString();
@@ -240,7 +267,7 @@
       const coin = fiatToCoin(amt, asset);
       const btn = document.createElement('button');
       if (coin) {
-        btn.textContent = `${sym}${amt}`;
+        btn.textContent = `${CUR[currency]}${amt}`;
         btn.title = `${coin} ${a.symbol}`;
         btn.onclick = () => { $('amount').value = coin; };
       } else {

@@ -4,15 +4,18 @@
 let cache = { at: 0, byId: {} };
 
 const IDS = ['ethereum', 'solana', 'usd-coin'];
+// Fiat currencies a tipper can choose to see suggested amounts in.
+export const CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud'];
 
 // Optional static override, e.g. PRICES_EUR="ethereum:3000,solana:150,usd-coin:0.92".
 // Skips the network entirely — handy for self-hosts that can't reach CoinGecko.
+// Applies the given value to every currency (fine for offline dev).
 const STATIC = (() => {
   if (!process.env.PRICES_EUR) return null;
   const byId = {};
   for (const pair of process.env.PRICES_EUR.split(',')) {
     const [id, v] = pair.split(':');
-    if (id && v) byId[id.trim()] = { eur: Number(v), usd: Number(v) };
+    if (id && v) byId[id.trim()] = Object.fromEntries(CURRENCIES.map((c) => [c, Number(v)]));
   }
   return byId;
 })();
@@ -22,17 +25,16 @@ export async function getPrices() {
   if (Date.now() - cache.at < 5 * 60_000) return cache.byId;
   try {
     const res = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${IDS.join(',')}&vs_currencies=eur,usd`,
+      `https://api.coingecko.com/api/v3/simple/price?ids=${IDS.join(',')}&vs_currencies=${CURRENCIES.join(',')}`,
       { signal: AbortSignal.timeout(5000) },
     );
     if (res.ok) {
       const json = await res.json();
       cache = {
         at: Date.now(),
-        byId: Object.fromEntries(IDS.map((id) => [id, {
-          eur: json[id]?.eur ?? null,
-          usd: json[id]?.usd ?? null,
-        }])),
+        byId: Object.fromEntries(IDS.map((id) => [id,
+          Object.fromEntries(CURRENCIES.map((c) => [c, json[id]?.[c] ?? null])),
+        ])),
       };
     }
   } catch {
