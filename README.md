@@ -29,20 +29,24 @@ donation page ──▶ relay server ──▶ WebSocket ──▶ OBS alert + g
 4. Alerts can't be faked: they are only emitted for real, confirmed
    on-chain transfers to your address (deduped by tx id).
 
-## Assets supported
+## Assets & networks supported
 
-| Asset | Chain | Notes |
-|-------|-------|-------|
-| ETH   | Ethereum | native, one-click MetaMask + QR |
-| USDC  | Ethereum | ERC-20, one-click MetaMask + QR |
-| SOL   | Solana | native, QR / any wallet |
-| USDC  | Solana | SPL, QR / any wallet |
+Donors just pick **ETH**, **USDC**, or **SOL** — they never choose a network.
+Because the receiving address is identical on every EVM chain, the server
+watches all of them at once and catches the tip wherever it lands:
 
-USDC is a stablecoin, so the EUR value of a tip doesn't swing with the
-market. USDC is received on the **same** addresses (the ERC-20 goes to your
-ETH address; the SPL token to your Solana account's token account, which the
-server resolves automatically). Disable either with `USDC_ETH=false` /
-`USDC_SOL=false`.
+| Asset | Networks watched |
+|-------|------------------|
+| ETH   | Ethereum, Base, Arbitrum, Optimism |
+| USDC  | Ethereum, Base, Arbitrum, Optimism, Polygon |
+| SOL   | Solana |
+| USDC  | Solana |
+
+This means a donor can pay on cheap L2s (Base/Arbitrum/Optimism, ~1¢ fees) and
+it still shows up. The donation page tells them "send on any network — your tip
+is safe on any of them." Turn off any EVM chain with
+`EVM_DISABLE=polygon,optimism` and Solana USDC with `USDC_SOL=false`. USDC is a
+stablecoin, so a tip's EUR value doesn't swing with the market.
 
 ## Setup
 

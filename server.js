@@ -13,7 +13,7 @@ import {
   donationSeen, recordDonation, markPaid,
   getState, setState, totalEur, topDonors, recentDonations,
 } from './src/db.js';
-import { watchEth } from './src/eth.js';
+import { watchEvmChain } from './src/evm.js';
 import { watchSol } from './src/sol.js';
 import { getPrices, eurValue, usdPrice } from './src/prices.js';
 
@@ -28,7 +28,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '1h' }));
 
 const PENDING_TTL_MS = config.pendingTtlMin * 60_000;
-const ASSETS = buildAssets(config);
+const { assets: ASSETS, chains: CHAINS } = buildAssets(config);
+// chainId -> USDC contract, for the browser's one-click USDC send
+const USDC_CONTRACTS = Object.fromEntries(CHAINS.filter((c) => c.usdc).map((c) => [c.chainId, c.usdc]));
 
 // -------------------------------------------------------- overlay settings
 const DEFAULT_SETTINGS = {
@@ -81,7 +83,7 @@ async function onPayment({ asset, txid, sender, amount, display }) {
 
   if (BigInt(amount) < asset.min) {
     recordDonation({
-      txid, asset: asset.id, chain: asset.chain, sender, amount,
+      txid, asset: asset.id, chain: asset.evm ? 'evm' : 'sol', sender, amount,
       eur: null, name: null, message: null, created_at: Date.now(),
     });
     return;
@@ -95,7 +97,7 @@ async function onPayment({ asset, txid, sender, amount, display }) {
   const eur = eurValue(asset, display, prices);
 
   recordDonation({
-    txid, asset: asset.id, chain: asset.chain, sender, amount,
+    txid, asset: asset.id, chain: asset.evm ? 'evm' : 'sol', sender, amount,
     eur, name, message, created_at: Date.now(),
   });
   if (pending) markPaid(pending.id, txid);
@@ -115,9 +117,11 @@ async function onPayment({ asset, txid, sender, amount, display }) {
 app.get('/api/config', (_req, res) => {
   res.json({
     streamer: config.streamerName,
+    usdcContracts: USDC_CONTRACTS,
     assets: Object.fromEntries(
       Object.values(ASSETS).map((a) => [a.id, {
         symbol: a.symbol, label: a.label, recipient: a.recipient, presets: a.presets,
+        evm: !!a.evm, networks: a.networks ?? [],
       }]),
     ),
   });
@@ -155,7 +159,7 @@ app.post('/api/donate', async (req, res) => {
 
   const id = crypto.randomUUID();
   createPending({
-    id, asset: asset.id, chain: asset.chain, expected,
+    id, asset: asset.id, chain: asset.evm ? 'evm' : 'sol', expected,
     name: String(name ?? '').slice(0, 40) || null,
     message: String(message ?? '').slice(0, 200) || null,
     created_at: Date.now(),
@@ -293,10 +297,14 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
-const byChain = (chain) => ({
-  native: Object.values(ASSETS).find((a) => a.chain === chain && a.kind === 'native') ?? null,
-  usdc: Object.values(ASSETS).find((a) => a.chain === chain && a.kind !== 'native') ?? null,
-});
-
-watchEth(byChain('eth'), onPayment);
-watchSol(byChain('sol'), onPayment);
+// One watcher per EVM chain, all feeding the shared logical ETH/USDC assets.
+if (config.ethAddress) {
+  for (const chain of CHAINS) {
+    watchEvmChain(chain, {
+      recipient: config.ethAddress,
+      ethAsset: chain.nativeEth ? ASSETS.eth : null,
+      usdcAsset: ASSETS.usdc,
+    }, onPayment);
+  }
+}
+watchSol({ native: ASSETS.sol ?? null, usdc: ASSETS.usdc_sol ?? null }, onPayment);

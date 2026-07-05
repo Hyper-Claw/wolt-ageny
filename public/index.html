@@ -143,6 +143,7 @@
     <div class="row hidden" id="mm-row">
       <button id="metamask">🦊 Pay with MetaMask</button>
     </div>
+    <p class="hint" id="netnote" style="color:var(--ok)"></p>
     <p class="hint" id="expiry"></p>
     <p class="hint">Waiting for your coin… <span id="spin">◐</span></p>
     <div class="err" id="err2"></div>
@@ -188,6 +189,7 @@
   const cfg = await fetch('/api/config').then(r => r.json());
   const assetIds = Object.keys(cfg.assets);
   if (!assetIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
+  const usdcContracts = cfg.usdcContracts || {};
 
   // Live USD price per coin, for the dollar preset buttons.
   const usdPrices = await fetch('/api/prices').then(r => r.json()).catch(() => ({}));
@@ -259,16 +261,37 @@
     $('copy-amount').onclick = () => navigator.clipboard.writeText(data.amount);
     $('copy-addr').onclick = () => navigator.clipboard.writeText(data.recipient);
 
-    // Browser-wallet one-click for Ethereum assets (native + ERC-20 USDC)
+    // "Send on any network" reassurance for EVM assets
+    const meta = cfg.assets[asset];
+    if (meta.evm && meta.networks?.length) {
+      $('netnote').textContent = `✅ Send on any of: ${meta.networks.join(', ')} — your tip is safe on any of them.`;
+    } else {
+      $('netnote').textContent = '';
+    }
+
+    // Browser-wallet one-click for EVM assets (native ETH on any network,
+    // or USDC using whichever network the wallet is currently on)
     if (data.wallet && window.ethereum) {
       $('mm-row').classList.remove('hidden');
       $('metamask').onclick = async () => {
         $('err2').textContent = '';
         try {
           const [from] = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          const tx = data.wallet.kind === 'erc20'
-            ? { from, to: data.wallet.to, data: data.wallet.data }
-            : { from, to: data.wallet.to, value: data.wallet.valueHex };
+          let tx;
+          if (data.wallet.kind === 'erc20') {
+            const cid = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
+            const contract = usdcContracts[cid];
+            if (!contract) {
+              $('err2').textContent = `Switch your wallet to a supported network (${meta.networks.join(', ')}) to pay with USDC.`;
+              return;
+            }
+            const calldata = '0xa9059cbb' +
+              data.wallet.recipient.replace(/^0x/, '').toLowerCase().padStart(64, '0') +
+              BigInt(data.wallet.amountBase).toString(16).padStart(64, '0');
+            tx = { from, to: contract, data: calldata };
+          } else {
+            tx = { from, to: data.wallet.to, value: data.wallet.valueHex };
+          }
           await window.ethereum.request({ method: 'eth_sendTransaction', params: [tx] });
         } catch (e) { $('err2').textContent = e?.message || 'Wallet error'; }
       };
