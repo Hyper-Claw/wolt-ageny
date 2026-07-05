@@ -3,7 +3,7 @@
 // unreachable (EUR shows blank; presets fall back to coin amounts).
 let cache = { at: 0, byId: {} };
 
-const IDS = ['ethereum', 'solana', 'usd-coin'];
+const IDS = ['ethereum', 'solana', 'usd-coin', 'bitcoin'];
 // Fiat currencies a tipper can choose to see suggested amounts in.
 export const CURRENCIES = ['usd', 'eur', 'gbp', 'cad', 'aud'];
 

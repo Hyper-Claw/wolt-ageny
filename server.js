@@ -15,6 +15,7 @@ import {
 } from './src/db.js';
 import { watchEvmChain } from './src/evm.js';
 import { watchSol } from './src/sol.js';
+import { watchBtc } from './src/btc.js';
 import { getPrices, eurValue } from './src/prices.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -303,3 +304,8 @@ if (config.ethAddress) {
   }
 }
 watchSol({ native: ASSETS.sol ?? null, usdc: ASSETS.usdc_sol ?? null }, onPayment);
+
+if (config.btcAddress) {
+  const btcAddresses = [config.btcAddress, config.btcTaproot].filter(Boolean);
+  watchBtc({ addresses: btcAddresses, asset: ASSETS.btc }, onPayment);
+}

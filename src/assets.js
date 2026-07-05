@@ -59,6 +59,17 @@ export function buildAssets(config) {
     });
   }
 
+  if (config.btcAddress) {
+    add({
+      id: 'btc', kind: 'btc', evm: false, symbol: 'BTC', label: '₿ Bitcoin',
+      decimals: 8, recipient: config.btcAddress, coingecko: 'bitcoin',
+      networks: ['Bitcoin'], minDisplay: config.minBtc, dustMax: 99_999,
+      presets: ['0.0002', '0.0005', '0.001', '0.002'],
+      uri: (recipient, display) => `bitcoin:${recipient}?amount=${display}`,
+      wallet: null,
+    });
+  }
+
   if (config.solAddress) {
     add({
       id: 'sol', kind: 'native', evm: false, symbol: 'SOL', label: '◎ Solana',

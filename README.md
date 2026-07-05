@@ -39,8 +39,13 @@ watches all of them at once and catches the tip wherever it lands:
 |-------|------------------|
 | ETH   | Ethereum, Base, Arbitrum, Optimism |
 | USDC  | Ethereum, Base, Arbitrum, Optimism, Polygon |
+| BTC   | Bitcoin (native segwit + taproot, via mempool.space) |
 | SOL   | Solana |
 | USDC  | Solana |
+
+Donors can type an amount **in their own currency** (USD/EUR/GBP/CAD/AUD,
+auto-detected from their browser) and the page converts it to the coin at live
+rates — or enter an exact coin amount.
 
 This means a donor can pay on cheap L2s (Base/Arbitrum/Optimism, ~1¢ fees) and
 it still shows up. The donation page tells them "send on any network — your tip

@@ -67,6 +67,13 @@
     background: #1c0d16; color: var(--muted); cursor: pointer; font-size: .9rem; transition: .15s;
   }
   .amounts button:hover { border-color: var(--accent); color: var(--ink); }
+  .amtrow { display: flex; gap: 8px; }
+  .amtrow input { flex: 1; }
+  .amtrow select { width: auto; padding: 0 10px; background: #1c0d16; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; font-size: .95rem; }
+  .coinrow { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 8px; }
+  #coinPreview { color: var(--accent2); font-size: .9rem; font-family: ui-monospace, monospace; }
+  .linkbtn { background: none; border: none; color: var(--muted); font-size: .8rem; cursor: pointer; text-decoration: underline; padding: 0; }
+  .linkbtn:hover { color: var(--accent); }
   .go {
     position: relative; width: 100%; margin-top: 22px; padding: 14px; border: none; border-radius: 12px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -118,13 +125,19 @@
     <label>Pay with</label>
     <div class="assets" id="assets"></div>
 
-    <label>Amount (<span id="symbol">ETH</span>)</label>
-    <input id="amount" inputmode="decimal" placeholder="0.01">
-    <div class="preset-head">
-      <span>Quick amounts in</span>
+    <label>Amount</label>
+    <div class="amtrow">
+      <input id="fiat" inputmode="decimal" placeholder="10">
       <select id="currency" aria-label="Your currency"></select>
     </div>
     <div class="amounts" id="presets"></div>
+    <div class="coinrow">
+      <span id="coinPreview">≈ —</span>
+      <button type="button" class="linkbtn" id="toggleExact">or enter exact <span id="symbol">ETH</span></button>
+    </div>
+    <div id="exactWrap" class="hidden" style="margin-top:8px">
+      <input id="amount" inputmode="decimal" placeholder="0.01">
+    </div>
 
     <label>Your name (shown on stream)</label>
     <input id="name" maxlength="40" placeholder="Anonymous">
@@ -238,17 +251,28 @@
     if (c === currency) o.selected = true;
     $('currency').appendChild(o);
   }
-  $('currency').onchange = () => { currency = $('currency').value; render(); };
-
-  function fiatToCoin(amount, id) {
-    const price = prices[id]?.[currency];
-    if (!price) return null;
-    const coin = amount / price;
-    if (coin >= 1) return (Math.round(coin * 100) / 100).toString();
-    return coin.toPrecision(4).replace(/\.?0+$/, '');
-  }
 
   let asset = assetIds[0];
+
+  function fmtCoin(coin) {
+    if (!isFinite(coin) || coin <= 0) return null;
+    if (coin >= 1) return (Math.round(coin * 100) / 100).toString();
+    return Number(coin.toPrecision(4)).toString();
+  }
+  function fiatToCoin(fiatAmt) {
+    const price = prices[asset]?.[currency];
+    if (!price || !(fiatAmt > 0)) return null;
+    return fmtCoin(fiatAmt / price);
+  }
+  // Coin amount that will actually be sent: the exact field wins, else fiat→coin.
+  function computeCoin() {
+    if (!$('exactWrap').classList.contains('hidden') && $('amount').value.trim()) return $('amount').value.trim();
+    return fiatToCoin(parseFloat($('fiat').value));
+  }
+  function updatePreview() {
+    const coin = computeCoin();
+    $('coinPreview').textContent = coin ? `≈ ${coin} ${cfg.assets[asset].symbol}` : '≈ —';
+  }
 
   function render() {
     $('assets').innerHTML = '';
@@ -263,33 +287,40 @@
     const a = cfg.assets[asset];
     $('symbol').textContent = a.symbol;
     $('presets').innerHTML = '';
+    const price = prices[asset]?.[currency];
     for (const amt of PRESETS) {
-      const coin = fiatToCoin(amt, asset);
       const btn = document.createElement('button');
-      if (coin) {
+      if (price) {
         btn.textContent = `${CUR[currency]}${amt}`;
-        btn.title = `${coin} ${a.symbol}`;
-        btn.onclick = () => { $('amount').value = coin; };
+        btn.onclick = () => { $('fiat').value = amt; $('amount').value = ''; updatePreview(); };
       } else {
         const fallback = (a.presets ?? [])[PRESETS.indexOf(amt)] ?? String(amt);
         btn.textContent = fallback;
-        btn.onclick = () => { $('amount').value = fallback; };
+        btn.onclick = () => { $('exactWrap').classList.remove('hidden'); $('amount').value = fallback; updatePreview(); };
       }
       $('presets').appendChild(btn);
     }
+    updatePreview();
   }
+
+  $('currency').onchange = () => { currency = $('currency').value; render(); };
+  $('fiat').oninput = updatePreview;
+  $('amount').oninput = updatePreview;
+  $('toggleExact').onclick = () => { $('exactWrap').classList.toggle('hidden'); updatePreview(); };
   render();
 
   let poller, spinT;
 
   $('go').onclick = async () => {
     $('err').textContent = '';
+    const amount = computeCoin();
+    if (!amount) { $('err').textContent = 'Enter an amount.'; return; }
     const res = await fetch('/api/donate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         asset,
-        amount: $('amount').value.trim(),
+        amount,
         name: $('name').value.trim(),
         message: $('message').value.trim(),
       }),
