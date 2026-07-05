@@ -74,11 +74,12 @@
   setInterval(loadSettings, 60_000);
 
   // Play an uploaded MP3 (URL/path) or a synthesized preset.
+  // Returns the Audio element for uploaded clips (so the alert can match its
+  // length), or null for the short synth sounds.
   function playSound(kind) {
-    if (muted || !kind || kind === 'none') return;
+    if (muted || !kind || kind === 'none') return null;
     if (kind.startsWith('/uploads/') || kind.startsWith('http')) {
-      try { const a = new Audio(kind); a.volume = 0.9; a.play(); } catch {}
-      return;
+      try { const a = new Audio(kind); a.volume = 0.9; a.play(); return a; } catch { return null; }
     }
     try {
       const ctx = new AudioContext();
@@ -95,6 +96,7 @@
       else if (kind === 'fanfare') { [523,659,784,1047].forEach((f,i) => beep(f, i*0.12, 0.8)); }
       else { [523.25,659.25,783.99].forEach((f,i) => beep(f, i*0.09, 0.9)); } // chime
     } catch {}
+    return null;
   }
 
   function tierFor(eur) {
@@ -127,12 +129,25 @@
     el.msg.textContent = a.message;
     el.box.classList.add('show');
     // custom MP3 wins, then tier preset, then the global default
-    playSound(tier?.soundUrl || tier?.sound || settings.sound || 'chime');
+    const audio = playSound(tier?.soundUrl || tier?.sound || settings.sound || 'chime');
 
-    setTimeout(() => {
+    // Keep the alert up until its sound finishes (min = configured duration,
+    // capped so a very long clip can't hog the screen), then cut the audio.
+    const start = Date.now();
+    let done = false;
+    const finish = () => {
+      if (done) return; done = true;
       el.box.classList.remove('show');
+      if (audio) { try { audio.pause(); } catch {} }
       setTimeout(() => { showing = false; next(); }, 600);
-    }, showMs);
+    };
+    const capMs = Math.max(showMs, 20_000);
+    if (audio) {
+      audio.addEventListener('ended', () => setTimeout(finish, Math.max(0, showMs - (Date.now() - start))));
+      setTimeout(finish, capMs);
+    } else {
+      setTimeout(finish, showMs);
+    }
   }
 
   function connect() {
