@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -17,9 +18,14 @@ import { watchSol } from './src/sol.js';
 import { getPrices, eurValue, usdPrice } from './src/prices.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Uploaded alert sounds live in the persisted data volume and are served publicly.
+const UPLOADS_DIR = path.join(__dirname, 'data', 'uploads');
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '1h' }));
 
 const PENDING_TTL_MS = config.pendingTtlMin * 60_000;
 const ASSETS = buildAssets(config);
@@ -44,6 +50,7 @@ function getSettings() {
 const DEFAULT_THEME = {
   title: `${config.streamerName === 'the streamer' ? 'Crypto' : config.streamerName}'s Tip Jar`,
   subtitle: 'Drop a coin in the piggy bank — your name and message pop up live on stream. 💕',
+  buttonText: 'Feed the piggy',   // the donate/submit button label
   pig: '🐷',            // the emoji used everywhere piggies appear
   accent: '#ff5fa2',    // main pink
   accent2: '#ff9ad0',   // light pink
@@ -211,11 +218,29 @@ app.post('/api/overlay-settings', adminAuth, (req, res) => {
       color: String(t.color ?? '').slice(0, 20),
       gif: String(t.gif ?? '').slice(0, 400),
       sound: ['chime', 'coin', 'fanfare', 'none', ''].includes(t.sound) ? t.sound : '',
+      soundUrl: String(t.soundUrl ?? '').slice(0, 400),   // custom uploaded MP3 (overrides sound)
+      soundName: String(t.soundName ?? '').slice(0, 80),  // original filename, for display
     })).sort((a, z) => a.minEur - z.minEur) : [],
   };
   setState('overlaySettings', JSON.stringify(clean));
   res.json({ ok: true, settings: clean });
 });
+
+// Upload a short MP3 alert sound. Body is the raw file bytes; returns its URL.
+app.post('/api/upload',
+  adminAuth,
+  express.raw({ type: ['audio/mpeg', 'audio/mp3', 'application/octet-stream'], limit: '6mb' }),
+  (req, res) => {
+    if (!req.body || !req.body.length) return res.status(400).json({ error: 'no file received' });
+    const name = crypto.randomBytes(8).toString('hex') + '.mp3';
+    try {
+      fs.writeFileSync(path.join(UPLOADS_DIR, name), req.body);
+    } catch (err) {
+      console.error('[upload] write failed:', err.message);
+      return res.status(500).json({ error: 'could not save file' });
+    }
+    res.json({ ok: true, url: `/uploads/${name}` });
+  });
 
 app.post('/api/theme', adminAuth, (req, res) => {
   const b = req.body ?? {};
@@ -223,6 +248,7 @@ app.post('/api/theme', adminAuth, (req, res) => {
   const clean = {
     title: String(b.title ?? DEFAULT_THEME.title).slice(0, 60) || DEFAULT_THEME.title,
     subtitle: String(b.subtitle ?? DEFAULT_THEME.subtitle).slice(0, 160),
+    buttonText: String(b.buttonText ?? DEFAULT_THEME.buttonText).slice(0, 40) || DEFAULT_THEME.buttonText,
     pig: (String(b.pig ?? '').slice(0, 8)) || DEFAULT_THEME.pig,
     accent: hex(b.accent, DEFAULT_THEME.accent),
     accent2: hex(b.accent2, DEFAULT_THEME.accent2),

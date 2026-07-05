@@ -73,9 +73,13 @@
   loadSettings();
   setInterval(loadSettings, 60_000);
 
-  // Synthesized alert sounds — no audio files to ship.
+  // Play an uploaded MP3 (URL/path) or a synthesized preset.
   function playSound(kind) {
-    if (muted || kind === 'none') return;
+    if (muted || !kind || kind === 'none') return;
+    if (kind.startsWith('/uploads/') || kind.startsWith('http')) {
+      try { const a = new Audio(kind); a.volume = 0.9; a.play(); } catch {}
+      return;
+    }
     try {
       const ctx = new AudioContext();
       const beep = (freq, start, dur, gain = 0.25) => {
@@ -122,7 +126,8 @@
     el.eur.textContent = a.eur != null ? `≈ €${a.eur}` : '';
     el.msg.textContent = a.message;
     el.box.classList.add('show');
-    playSound(tier?.sound || settings.sound || 'chime');
+    // custom MP3 wins, then tier preset, then the global default
+    playSound(tier?.soundUrl || tier?.sound || settings.sound || 'chime');
 
     setTimeout(() => {
       el.box.classList.remove('show');

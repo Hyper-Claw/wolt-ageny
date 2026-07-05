@@ -126,7 +126,7 @@
     <label>Message (optional)</label>
     <textarea id="message" maxlength="200" placeholder="oink oink! 🐽"></textarea>
 
-    <button class="go" id="go">Feed the piggy <span class="btn-pig" id="btnPig">🐷</span></button>
+    <button class="go" id="go"><span id="btnText">Feed the piggy</span> <span class="btn-pig" id="btnPig">🐷</span></button>
     <div class="err" id="err"></div>
   </div>
 
@@ -167,6 +167,7 @@
   if (theme.accent2) document.documentElement.style.setProperty('--accent2', theme.accent2);
   if (theme.title) { $('jarTitle').textContent = theme.title; document.title = theme.title; }
   if (theme.subtitle) $('jarSub').textContent = theme.subtitle;
+  if (theme.buttonText) $('btnText').textContent = theme.buttonText;
   for (const id of ['titlePig', 'btnPig', 'payPig', 'celebPig1', 'celebPig2']) $(id).textContent = pig;
 
   // floating background piggies (count + speed from theme)

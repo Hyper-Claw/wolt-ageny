@@ -66,6 +66,8 @@
   </div>
   <label>Subtitle</label>
   <input id="thSub" placeholder="Drop a coin in the piggy bank — pops up live on stream 💕">
+  <label>Donate button text</label>
+  <input id="thBtn" placeholder="Feed the piggy">
   <div class="grid">
     <div><label>Main color</label><input id="thAccent" type="color" value="#ff5fa2" style="height:44px;padding:4px"></div>
     <div><label>Light color</label><input id="thAccent2" type="color" value="#ff9ad0" style="height:44px;padding:4px"></div>
@@ -146,15 +148,24 @@
         <div class="grid3">
           <div><label>Above €</label><input type="number" min="0" value="${t.minEur}" data-k="minEur" data-i="${i}"></div>
           <div><label>Border color</label><input value="${t.color||''}" placeholder="#3ddc84" data-k="color" data-i="${i}"></div>
-          <div><label>Sound</label><select data-k="sound" data-i="${i}">
+          <div><label>Built-in sound</label><select data-k="sound" data-i="${i}">
             <option value="">(use default)</option>
             ${SOUNDS.map(s=>`<option value="${s}" ${t.sound===s?'selected':''}>${s}</option>`).join('')}
           </select></div>
         </div>
         <label>GIF / image URL (optional)</label>
         <input value="${t.gif||''}" placeholder="https://…/celebrate.gif" data-k="gif" data-i="${i}">
+        <label>Custom sound (MP3) — plays instead of the built-in one</label>
+        <div class="row" style="align-items:center; margin-top:2px">
+          <input type="file" accept="audio/mpeg,.mp3" data-file="${i}" style="flex:1; padding:8px">
+          <button class="btn ghost" data-playsound="${i}" title="Preview">▶</button>
+          ${t.soundUrl ? `<button class="btn ghost" data-clearsound="${i}">Clear</button>` : ''}
+        </div>
+        <div style="font-size:.8rem; color:var(--muted); margin-top:4px">
+          ${t.soundUrl ? '🎵 ' + (t.soundName || 'custom sound') : 'no custom sound — using the built-in one'}
+        </div>
         <div class="row" style="margin-top:10px">
-          <button class="btn ghost" data-rm="${i}">Remove</button>
+          <button class="btn ghost" data-rm="${i}">Remove tier</button>
         </div>`;
       $('tiers').appendChild(div);
     });
@@ -165,8 +176,41 @@
     $('tiers').querySelectorAll('[data-rm]').forEach(b => {
       b.onclick = () => { tiers.splice(+b.dataset.rm,1); renderTiers(); };
     });
+    // upload an MP3 for this tier
+    $('tiers').querySelectorAll('[data-file]').forEach(inp => {
+      inp.onchange = async () => {
+        const i = +inp.dataset.file, f = inp.files[0]; if (!f) return;
+        const admin = $('adminKey').value.trim();
+        if (!admin) { setStatus('Enter your admin key (top of page) before uploading.', false); return; }
+        setStatus(`Uploading ${f.name}…`, true);
+        try {
+          const r = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'x-admin-key': admin, 'content-type': f.type || 'application/octet-stream' },
+            body: f,
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'upload failed');
+          tiers[i].soundUrl = d.url; tiers[i].soundName = f.name; renderTiers();
+          setStatus(`✔ Uploaded ${f.name}. Click "Save settings" to keep it.`, true);
+        } catch (e) { setStatus('✗ Upload failed: ' + e.message, false); }
+      };
+    });
+    // preview a tier's sound
+    $('tiers').querySelectorAll('[data-playsound]').forEach(b => {
+      b.onclick = () => {
+        const t = tiers[+b.dataset.playsound];
+        if (t.soundUrl) { new Audio(t.soundUrl).play().catch(() => {}); }
+        else if (t.sound) { playSound(t.sound); }
+        else { setStatus('This tier has no sound set yet.', false); }
+      };
+    });
+    // clear a tier's custom sound
+    $('tiers').querySelectorAll('[data-clearsound]').forEach(b => {
+      b.onclick = () => { const i = +b.dataset.clearsound; tiers[i].soundUrl = ''; tiers[i].soundName = ''; renderTiers(); };
+    });
   }
-  $('addTier').onclick = () => { tiers.push({ minEur:10, color:'', gif:'', sound:'' }); renderTiers(); };
+  $('addTier').onclick = () => { tiers.push({ minEur:10, color:'', gif:'', sound:'', soundUrl:'', soundName:'' }); renderTiers(); };
 
   // --- theme (look & feel) ---
   $('thCount').oninput = () => $('thCountVal').textContent = $('thCount').value;
@@ -178,6 +222,7 @@
       if (t && !t.error) {
         $('thTitle').value = t.title || '';
         $('thSub').value = t.subtitle || '';
+        $('thBtn').value = t.buttonText || '';
         $('thPig').value = t.pig || '🐷';
         if (t.accent) $('thAccent').value = t.accent;
         if (t.accent2) $('thAccent2').value = t.accent2;
@@ -195,6 +240,7 @@
       body: JSON.stringify({
         title: $('thTitle').value.trim(),
         subtitle: $('thSub').value.trim(),
+        buttonText: $('thBtn').value.trim(),
         pig: $('thPig').value.trim(),
         accent: $('thAccent').value,
         accent2: $('thAccent2').value,
