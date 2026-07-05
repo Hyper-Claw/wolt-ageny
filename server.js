@@ -207,7 +207,28 @@ function adminAuth(req, res, next) {
   next();
 }
 
-app.post('/api/overlay-settings', adminAuth, (req, res) => {
+// Turn a GIF share/page link (e.g. tenor.com/view/…) into a direct image URL an
+// <img> can render. Direct image links pass straight through. Best-effort.
+async function resolveGif(url) {
+  const u = String(url || '').trim();
+  if (!u || !/^https?:\/\//i.test(u)) return u;
+  if (/\.(gif|png|jpe?g|webp)(\?|#|$)/i.test(u)) return u;          // already a direct image
+  if (/^https?:\/\/media\d*\.tenor\.com\//i.test(u)) return u;       // direct tenor media
+  try {
+    const res = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(6000) });
+    if (res.ok) {
+      const html = await res.text();
+      const media = html.match(/https:\/\/media\d*\.tenor\.com\/[^"'\\\s]+\.gif/i);
+      if (media) return media[0];
+      const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+              || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (og) return og[1];
+    }
+  } catch { /* fall through */ }
+  return u;
+}
+
+app.post('/api/overlay-settings', adminAuth, async (req, res) => {
   const b = req.body ?? {};
   const clean = {
     sound: ['chime', 'coin', 'fanfare', 'none'].includes(b.sound) ? b.sound : 'chime',
@@ -222,6 +243,8 @@ app.post('/api/overlay-settings', adminAuth, (req, res) => {
       soundName: String(t.soundName ?? '').slice(0, 80),  // original filename, for display
     })).sort((a, z) => a.minEur - z.minEur) : [],
   };
+  // Resolve any GIF page links (Tenor etc.) to direct image URLs.
+  for (const t of clean.tiers) t.gif = await resolveGif(t.gif);
   setState('overlaySettings', JSON.stringify(clean));
   res.json({ ok: true, settings: clean });
 });
@@ -259,13 +282,13 @@ app.post('/api/theme', adminAuth, (req, res) => {
   res.json({ ok: true, theme: clean });
 });
 
-app.post('/api/test-alert', adminAuth, (req, res) => {
+app.post('/api/test-alert', adminAuth, async (req, res) => {
   const b = req.body ?? {};
   const eur = Number(b.eur) || 25;
   // Optional tier override so a specific tier's look/sound can be tested even
   // before it's been saved.
   const tier = b.tier ? {
-    color: String(b.tier.color ?? ''), gif: String(b.tier.gif ?? ''), sound: String(b.tier.sound ?? ''),
+    color: String(b.tier.color ?? ''), gif: await resolveGif(b.tier.gif), sound: String(b.tier.sound ?? ''),
   } : null;
   broadcast({
     type: 'donation', asset: 'usdc', symbol: b.symbol || 'USDC',

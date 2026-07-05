@@ -153,8 +153,8 @@
             ${SOUNDS.map(s=>`<option value="${s}" ${t.sound===s?'selected':''}>${s}</option>`).join('')}
           </select></div>
         </div>
-        <label>GIF / image URL (optional)</label>
-        <input value="${t.gif||''}" placeholder="https://…/celebrate.gif" data-k="gif" data-i="${i}">
+        <label>GIF (optional) — paste a Tenor/Giphy link or a direct .gif URL</label>
+        <input value="${t.gif||''}" placeholder="https://tenor.com/view/…  or  https://media.tenor.com/….gif" data-k="gif" data-i="${i}">
         <label>Custom sound (MP3) — plays instead of the built-in one</label>
         <div class="row" style="align-items:center; margin-top:2px">
           <input type="file" accept="audio/mpeg,.mp3" data-file="${i}" style="flex:1; padding:8px">
