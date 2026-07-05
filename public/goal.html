@@ -5,36 +5,29 @@
 <title>Goal Widget</title>
 <style>
   :root { --accent: #ff5fa2; --accent2: #ff9ad0; }
-  /* Transparent, no box — just the bar + amount, readable over any video */
+  /* Transparent, no box — title + amount on one line, bar below */
   body { margin: 0; background: transparent; overflow: hidden;
          font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
   .wrap { width: 440px; padding: 8px; }
-  .title { font-weight: 800; font-size: 1.05rem; margin-bottom: 8px;
-           text-shadow: 0 1px 4px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); }
-  .row { display: flex; align-items: center; gap: 12px; }
-  .bar { position: relative; flex: 1; height: 20px; border-radius: 10px;
-         background: rgba(0,0,0,.4); box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
-  .barclip { position: absolute; inset: 0; border-radius: 10px; overflow: hidden; }
+  .head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;
+          text-shadow: 0 1px 4px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); }
+  .title { font-weight: 800; font-size: 1.05rem; }
+  .amt { font-weight: 800; font-size: 1.05rem; white-space: nowrap; }
+  .amt .goal { color: #d9d9e3; font-weight: 600; }
+  .bar { position: relative; height: 20px; border-radius: 10px;
+         background: rgba(0,0,0,.4); box-shadow: 0 0 0 1px rgba(0,0,0,.35); overflow: hidden; }
   .fill { height: 100%; width: 0; border-radius: 10px;
           background: linear-gradient(90deg, var(--accent), var(--accent2), #4be3a0);
           transition: width .8s cubic-bezier(.2,.8,.2,1); }
-  .runner { position: absolute; top: 50%; transform: translate(-50%,-50%); font-size: 1.4rem; left: 0;
-            transition: left .8s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
-  .amt { font-weight: 800; font-size: 1.05rem; white-space: nowrap;
-         text-shadow: 0 1px 4px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.8); }
-  .amt .goal { color: #d9d9e3; font-weight: 600; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="title" id="title">Stream Goal</div>
-  <div class="row">
-    <div class="bar">
-      <div class="barclip"><div class="fill" id="fill"></div></div>
-      <span class="runner" id="runner">🐷</span>
-    </div>
-    <div class="amt" id="amt">€0</div>
+  <div class="head">
+    <span class="title" id="title">Stream Goal</span>
+    <span class="amt" id="amt">€0</span>
   </div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
 </div>
 
 <script>
@@ -48,7 +41,7 @@
     try {
       const t = await fetch('/api/theme').then(r => r.json());
       if (t && !t.error) {
-        if (t.pig) { pig = t.pig; $('runner').textContent = pig; }
+        if (t.pig) pig = t.pig;
         if (t.accent) document.documentElement.style.setProperty('--accent', t.accent);
         if (t.accent2) document.documentElement.style.setProperty('--accent2', t.accent2);
       }
@@ -62,22 +55,18 @@
 
     $('title').textContent = `${pig} ${s.goalTitle || 'Stream Goal'}`;
     const raised = `€${s.totalEur.toLocaleString()}`;
-    let pct;
     if (s.goalEur > 0) {
       $('amt').innerHTML = `${raised} <span class="goal">/ €${s.goalEur.toLocaleString()}</span>`;
-      pct = Math.min(100, (s.totalEur / s.goalEur) * 100);
+      $('fill').style.width = Math.min(100, (s.totalEur / s.goalEur) * 100) + '%';
     } else {
       $('amt').textContent = raised;
-      pct = s.totalEur > 0 ? 100 : 0;
+      $('fill').style.width = s.totalEur > 0 ? '100%' : '0';
     }
-    $('fill').style.width = pct + '%';
-    $('runner').style.left = pct + '%';
   }
 
   refresh();
   setInterval(refresh, 15_000);
 
-  // bump instantly on a new donation
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws?key=${encodeURIComponent(key)}`);
