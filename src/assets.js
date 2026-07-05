@@ -41,7 +41,7 @@ export function buildAssets(config) {
     const usdcNetworks = chains.filter((c) => c.usdc).map((c) => c.name);
 
     add({
-      id: 'eth', kind: 'native', evm: true, symbol: 'ETH', label: 'Ξ ETH',
+      id: 'eth', kind: 'native', evm: true, symbol: 'ETH', label: 'ETH',
       decimals: 18, recipient: config.ethAddress, coingecko: 'ethereum',
       networks: ethNetworks, minDisplay: config.minEth, dustMax: 999_000,
       presets: ['0.005', '0.01', '0.025', '0.05'],
@@ -49,7 +49,7 @@ export function buildAssets(config) {
       wallet: (recipient, base) => ({ kind: 'native', to: recipient, valueHex: '0x' + BigInt(base).toString(16) }),
     });
     add({
-      id: 'usdc', kind: 'erc20', evm: true, symbol: 'USDC', label: '$ USDC',
+      id: 'usdc', kind: 'erc20', evm: true, symbol: 'USDC', label: 'USDC',
       decimals: 6, recipient: config.ethAddress, coingecko: 'usd-coin',
       networks: usdcNetworks, minDisplay: config.minUsdc, dustMax: 999,
       presets: ['5', '10', '25', '50'],
@@ -61,7 +61,7 @@ export function buildAssets(config) {
 
   if (config.btcAddress) {
     add({
-      id: 'btc', kind: 'btc', evm: false, symbol: 'BTC', label: '₿ Bitcoin',
+      id: 'btc', kind: 'btc', evm: false, symbol: 'BTC', label: 'Bitcoin (BTC)',
       decimals: 8, recipient: config.btcAddress, coingecko: 'bitcoin',
       networks: ['Bitcoin'], minDisplay: config.minBtc, dustMax: 99_999,
       presets: ['0.0002', '0.0005', '0.001', '0.002'],
@@ -72,7 +72,7 @@ export function buildAssets(config) {
 
   if (config.solAddress) {
     add({
-      id: 'sol', kind: 'native', evm: false, symbol: 'SOL', label: '◎ Solana',
+      id: 'sol', kind: 'native', evm: false, symbol: 'SOL', label: 'Solana (SOL)',
       decimals: 9, recipient: config.solAddress, coingecko: 'solana',
       networks: ['Solana'], minDisplay: config.minSol, dustMax: 99_999,
       presets: ['0.05', '0.1', '0.25', '0.5'],
@@ -81,7 +81,7 @@ export function buildAssets(config) {
     });
     if (config.usdcSol) {
       add({
-        id: 'usdc_sol', kind: 'spl', evm: false, symbol: 'USDC', label: '$ USDC · Solana',
+        id: 'usdc_sol', kind: 'spl', evm: false, symbol: 'USDC', label: 'USDC (Solana)',
         decimals: 6, recipient: config.solAddress, mint: USDC_SOL_MINT, coingecko: 'usd-coin',
         networks: ['Solana'], minDisplay: config.minUsdc, dustMax: 999,
         presets: ['5', '10', '25', '50'],

@@ -128,16 +128,10 @@
     <label>Amount</label>
     <div class="amtrow">
       <input id="fiat" inputmode="decimal" placeholder="10">
-      <select id="currency" aria-label="Your currency"></select>
+      <select id="currency" aria-label="Amount denomination"></select>
     </div>
     <div class="amounts" id="presets"></div>
-    <div class="coinrow">
-      <span id="coinPreview">≈ —</span>
-      <button type="button" class="linkbtn" id="toggleExact">or enter exact <span id="symbol">ETH</span></button>
-    </div>
-    <div id="exactWrap" class="hidden" style="margin-top:8px">
-      <input id="amount" inputmode="decimal" placeholder="0.01">
-    </div>
+    <div class="coinrow"><span id="coinPreview"></span></div>
 
     <label>Your name (shown on stream)</label>
     <input id="name" maxlength="40" placeholder="Anonymous">
@@ -243,35 +237,59 @@
     return 'usd';
   }
 
-  let currency = guessCurrency();
-  // populate the picker
-  for (const c of Object.keys(CUR)) {
-    const o = document.createElement('option');
-    o.value = c; o.textContent = `${CUR[c]} ${c.toUpperCase()}`;
-    if (c === currency) o.selected = true;
-    $('currency').appendChild(o);
-  }
-
   let asset = assetIds[0];
+  let denom = guessCurrency();   // a fiat code (usd/eur/…) or 'coin' to pay in the coin itself
+
+  const symbolOf = () => cfg.assets[asset].symbol;
 
   function fmtCoin(coin) {
     if (!isFinite(coin) || coin <= 0) return null;
     if (coin >= 1) return (Math.round(coin * 100) / 100).toString();
     return Number(coin.toPrecision(4)).toString();
   }
-  function fiatToCoin(fiatAmt) {
-    const price = prices[asset]?.[currency];
-    if (!price || !(fiatAmt > 0)) return null;
-    return fmtCoin(fiatAmt / price);
-  }
-  // Coin amount that will actually be sent: the exact field wins, else fiat→coin.
+  // Coin amount to send, from the entered value + selected denomination.
   function computeCoin() {
-    if (!$('exactWrap').classList.contains('hidden') && $('amount').value.trim()) return $('amount').value.trim();
-    return fiatToCoin(parseFloat($('fiat').value));
+    const raw = $('fiat').value.trim();
+    const v = parseFloat(raw);
+    if (!(v > 0)) return null;
+    if (denom === 'coin') return raw;                    // exact coin amount
+    const price = prices[asset]?.[denom];
+    return price ? fmtCoin(v / price) : null;
   }
   function updatePreview() {
     const coin = computeCoin();
-    $('coinPreview').textContent = coin ? `≈ ${coin} ${cfg.assets[asset].symbol}` : '≈ —';
+    $('coinPreview').textContent = (coin && denom !== 'coin') ? `= ${coin} ${symbolOf()}` : '';
+  }
+
+  function setPlaceholder() {
+    $('fiat').placeholder = denom === 'coin' ? (cfg.assets[asset].presets?.[0] || '0.01') : '10';
+  }
+
+  function buildDenoms() {
+    const sel = $('currency');
+    const keep = denom;
+    sel.innerHTML = '';
+    const opt = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
+    for (const c of Object.keys(CUR)) opt(c, `${CUR[c]} ${c.toUpperCase()}`);
+    opt('coin', symbolOf());                             // pay in the coin itself
+    sel.value = [...sel.options].some((o) => o.value === keep) ? keep : guessCurrency();
+    denom = sel.value;
+    setPlaceholder();
+  }
+
+  function renderPresets() {
+    const a = cfg.assets[asset];
+    $('presets').innerHTML = '';
+    const price = denom !== 'coin' && prices[asset]?.[denom];
+    const items = (denom === 'coin' || !price)
+      ? (a.presets ?? []).map((c) => ({ label: c, fill: c }))
+      : PRESETS.map((amt) => ({ label: `${CUR[denom]}${amt}`, fill: amt }));
+    for (const it of items) {
+      const btn = document.createElement('button');
+      btn.textContent = it.label;
+      btn.onclick = () => { $('fiat').value = it.fill; updatePreview(); };
+      $('presets').appendChild(btn);
+    }
   }
 
   function render() {
@@ -284,29 +302,13 @@
       b.onclick = () => { asset = id; render(); };
       $('assets').appendChild(b);
     }
-    const a = cfg.assets[asset];
-    $('symbol').textContent = a.symbol;
-    $('presets').innerHTML = '';
-    const price = prices[asset]?.[currency];
-    for (const amt of PRESETS) {
-      const btn = document.createElement('button');
-      if (price) {
-        btn.textContent = `${CUR[currency]}${amt}`;
-        btn.onclick = () => { $('fiat').value = amt; $('amount').value = ''; updatePreview(); };
-      } else {
-        const fallback = (a.presets ?? [])[PRESETS.indexOf(amt)] ?? String(amt);
-        btn.textContent = fallback;
-        btn.onclick = () => { $('exactWrap').classList.remove('hidden'); $('amount').value = fallback; updatePreview(); };
-      }
-      $('presets').appendChild(btn);
-    }
+    buildDenoms();
+    renderPresets();
     updatePreview();
   }
 
-  $('currency').onchange = () => { currency = $('currency').value; render(); };
+  $('currency').onchange = () => { denom = $('currency').value; setPlaceholder(); renderPresets(); updatePreview(); };
   $('fiat').oninput = updatePreview;
-  $('amount').oninput = updatePreview;
-  $('toggleExact').onclick = () => { $('exactWrap').classList.toggle('hidden'); updatePreview(); };
   render();
 
   let poller, spinT;
