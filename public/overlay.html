@@ -43,8 +43,9 @@
 (() => {
   const params = new URLSearchParams(location.search);
   const key = params.get('key') || '';
-  const showMs = Number(params.get('duration') || 8) * 1000;
   const muted = params.has('mute');
+  let minMs = 8000;    // min time an alert stays up (from settings)
+  let maxMs = 20000;   // hard cap so a long sound can't hog the screen
 
   const el = {
     box: document.getElementById('alert'),
@@ -60,7 +61,11 @@
   async function loadSettings() {
     try {
       const s = await fetch(`/api/overlay-settings?key=${encodeURIComponent(key)}`).then(r => r.json());
-      if (s && !s.error) settings = s;
+      if (s && !s.error) {
+        settings = s;
+        if (s.minDuration) minMs = s.minDuration * 1000;
+        if (s.maxDuration) maxMs = Math.max(minMs, s.maxDuration * 1000);
+      }
     } catch {}
     try {
       const t = await fetch('/api/theme').then(r => r.json());
@@ -141,12 +146,11 @@
       if (audio) { try { audio.pause(); } catch {} }
       setTimeout(() => { showing = false; next(); }, 600);
     };
-    const capMs = Math.max(showMs, 20_000);
     if (audio) {
-      audio.addEventListener('ended', () => setTimeout(finish, Math.max(0, showMs - (Date.now() - start))));
-      setTimeout(finish, capMs);
+      audio.addEventListener('ended', () => setTimeout(finish, Math.max(0, minMs - (Date.now() - start))));
+      setTimeout(finish, maxMs);
     } else {
-      setTimeout(finish, showMs);
+      setTimeout(finish, minMs);
     }
   }
 

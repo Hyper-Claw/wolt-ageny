@@ -37,7 +37,9 @@ const USDC_CONTRACTS = Object.fromEntries(CHAINS.filter((c) => c.usdc).map((c) =
 const DEFAULT_SETTINGS = {
   sound: 'chime',                       // chime | coin | fanfare | none
   goalTitle: config.goalTitle,
-  goalEur: config.goalEur,
+  goalEur: config.goalEur,              // the BASE goal she sets
+  minDuration: 8,                       // alert min seconds on screen
+  maxDuration: 20,                      // alert max seconds (cap for long sounds)
   // tiers: pick the highest whose minEur <= donation EUR
   tiers: [],                            // [{ minEur, color, gif, sound }]
 };
@@ -47,6 +49,23 @@ function getSettings() {
   if (!raw) return { ...DEFAULT_SETTINGS };
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }; }
   catch { return { ...DEFAULT_SETTINGS }; }
+}
+
+// --- goal progress: a per-stream baseline (so it can be reset to €0) and a
+// working target that auto-doubles as it's reached ---
+const gnum = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+const getBaseline = () => gnum(getState('goalBaseline'), 0);
+const getGoalCurrent = () => {
+  const v = getState('goalCurrent');
+  return v != null ? gnum(v, 0) : getSettings().goalEur;
+};
+function autoAdvanceGoal(totalAll) {
+  let goal = getGoalCurrent();
+  if (goal <= 0) return;
+  const raised = totalAll - getBaseline();
+  let changed = false;
+  while (raised >= goal) { goal *= 2; changed = true; }   // double until it's ahead again
+  if (changed) setState('goalCurrent', goal);
 }
 
 // -------------------------------------------------------- look & feel theme
@@ -110,8 +129,10 @@ async function onPayment({ asset, txid, sender, amount, display }) {
     name: name || 'Anonymous', message: message || '',
     txid,
   };
+  const totalAll = totalEur().total;
+  autoAdvanceGoal(totalAll);   // double the goal if this tip reached it
   console.log(`[tip] ${alert.name}: ${alert.amount} ${alert.symbol}${eur != null ? ` (~€${eur})` : ''}`);
-  broadcast({ ...alert, total: totalEur().total });
+  broadcast({ ...alert, total: totalAll });
 }
 
 // ------------------------------------------------------------------- routes
@@ -191,10 +212,11 @@ app.get('/api/theme', (_req, res) => res.json(getTheme()));
 app.get('/api/stats', overlayAuth, (_req, res) => {
   const s = getSettings();
   const { total, n } = totalEur();
+  const raised = Math.max(0, total - getBaseline());   // per-stream progress
   res.json({
-    totalEur: Math.round(total * 100) / 100,
+    totalEur: Math.round(raised * 100) / 100,
     count: n,
-    goalEur: s.goalEur,
+    goalEur: getGoalCurrent(),
     goalTitle: s.goalTitle,
     top: topDonors(5),
     recent: recentDonations(8),
@@ -230,10 +252,14 @@ async function resolveGif(url) {
 
 app.post('/api/overlay-settings', adminAuth, async (req, res) => {
   const b = req.body ?? {};
+  const prev = getSettings();
+  const minDuration = Math.max(1, Math.min(60, Math.round(Number(b.minDuration)) || 8));
   const clean = {
     sound: ['chime', 'coin', 'fanfare', 'none'].includes(b.sound) ? b.sound : 'chime',
     goalTitle: String(b.goalTitle ?? config.goalTitle).slice(0, 60),
     goalEur: Math.max(0, Number(b.goalEur) || 0),
+    minDuration,
+    maxDuration: Math.max(minDuration, Math.min(120, Math.round(Number(b.maxDuration)) || 20)),
     tiers: Array.isArray(b.tiers) ? b.tiers.slice(0, 5).map((t) => ({
       minEur: Math.max(0, Number(t.minEur) || 0),
       color: String(t.color ?? '').slice(0, 20),
@@ -246,7 +272,17 @@ app.post('/api/overlay-settings', adminAuth, async (req, res) => {
   // Resolve any GIF page links (Tenor etc.) to direct image URLs.
   for (const t of clean.tiers) t.gif = await resolveGif(t.gif);
   setState('overlaySettings', JSON.stringify(clean));
+  // If the base goal changed (or was never initialized), reset the working
+  // (auto-doubling) target to the new base.
+  if (clean.goalEur !== prev.goalEur || getState('goalCurrent') == null) setState('goalCurrent', clean.goalEur);
   res.json({ ok: true, settings: clean });
+});
+
+// Reset goal progress for a fresh stream: raised → €0, goal → the base amount.
+app.post('/api/reset-goal', adminAuth, (_req, res) => {
+  setState('goalBaseline', totalEur().total);        // everything so far no longer counts
+  setState('goalCurrent', getSettings().goalEur);     // back to the base goal
+  res.json({ ok: true });
 });
 
 // Upload a short MP3 alert sound. Body is the raw file bytes; returns its URL.

@@ -46,7 +46,7 @@
 </div>
 
 <div class="card">
-  <h2>Alert sound</h2>
+  <h2>Alert sound &amp; timing</h2>
   <div class="row">
     <select id="sound" style="max-width:200px">
       <option value="chime">Chime</option>
@@ -55,6 +55,10 @@
       <option value="none">Silent</option>
     </select>
     <button class="btn ghost" id="preview">▶ Preview</button>
+  </div>
+  <div class="grid" style="margin-top:14px">
+    <div><label>Min seconds on screen</label><input id="minDur" type="number" min="1" max="60" placeholder="8"></div>
+    <div><label>Max seconds (cap for long sounds)</label><input id="maxDur" type="number" min="1" max="120" placeholder="20"></div>
   </div>
 </div>
 
@@ -88,6 +92,10 @@
   <div class="grid">
     <div><label>Goal title</label><input id="goalTitle" placeholder="New PC Goal"></div>
     <div><label>Goal amount (€, 0 = none)</label><input id="goalEur" type="number" min="0" placeholder="500"></div>
+  </div>
+  <p class="sub" style="margin-top:12px">When the goal is reached it <b>doubles automatically</b>. Hit <b>Reset goal</b> before a stream to set progress back to €0 and the goal back to the amount above. (Saving the goal amount above also applies via “Save settings”.)</p>
+  <div class="row">
+    <button class="btn ghost" id="resetGoal">↺ Reset goal for new stream</button>
   </div>
 </div>
 
@@ -288,6 +296,8 @@
       const s = await fetch(`/api/overlay-settings?key=${encodeURIComponent(k)}`).then(r=>r.json());
       if (s && !s.error) {
         $('sound').value = s.sound || 'chime';
+        $('minDur').value = s.minDuration ?? 8;
+        $('maxDur').value = s.maxDuration ?? 20;
         $('goalTitle').value = s.goalTitle || '';
         $('goalEur').value = s.goalEur || 0;
         tiers.length = 0; (s.tiers||[]).forEach(t => tiers.push(t)); renderTiers();
@@ -304,12 +314,21 @@
       headers:{ 'content-type':'application/json', 'x-admin-key': $('adminKey').value.trim() },
       body: JSON.stringify({
         sound: $('sound').value,
+        minDuration: Number($('minDur').value) || 8,
+        maxDuration: Number($('maxDur').value) || 20,
         goalTitle: $('goalTitle').value.trim(),
         goalEur: Number($('goalEur').value) || 0,
         tiers,
       }),
     });
     setStatus(res.ok ? '✔ Saved — your overlay will update within a minute.' : '✗ Save failed (check admin key).', res.ok);
+  };
+
+  $('resetGoal').onclick = async () => {
+    const admin = $('adminKey').value.trim();
+    if (!admin) { setStatus('Enter your admin key first.', false); return; }
+    const res = await fetch('/api/reset-goal', { method: 'POST', headers: { 'x-admin-key': admin } });
+    setStatus(res.ok ? '✔ Goal reset — progress is back to €0.' : '✗ Reset failed (check admin key).', res.ok);
   };
 
   $('test').onclick = async () => {
