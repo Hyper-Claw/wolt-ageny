@@ -66,8 +66,11 @@
   </div>
   <label>Subtitle</label>
   <input id="thSub" placeholder="Drop a coin in the piggy bank — pops up live on stream 💕">
-  <label>Donate button text</label>
-  <input id="thBtn" placeholder="Feed the piggy">
+  <div class="grid">
+    <div><label>Donate button text</label><input id="thBtn" placeholder="Feed the piggy"></div>
+    <div><label>Preset amounts currency</label>
+      <select id="thCurrency"><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select></div>
+  </div>
   <div class="grid">
     <div><label>Main color</label><input id="thAccent" type="color" value="#ff5fa2" style="height:44px;padding:4px"></div>
     <div><label>Light color</label><input id="thAccent2" type="color" value="#ff9ad0" style="height:44px;padding:4px"></div>
@@ -223,6 +226,7 @@
         $('thTitle').value = t.title || '';
         $('thSub').value = t.subtitle || '';
         $('thBtn').value = t.buttonText || '';
+        $('thCurrency').value = t.currency === 'EUR' ? 'EUR' : 'USD';
         $('thPig').value = t.pig || '🐷';
         if (t.accent) $('thAccent').value = t.accent;
         if (t.accent2) $('thAccent2').value = t.accent2;
@@ -241,6 +245,7 @@
         title: $('thTitle').value.trim(),
         subtitle: $('thSub').value.trim(),
         buttonText: $('thBtn').value.trim(),
+        currency: $('thCurrency').value,
         pig: $('thPig').value.trim(),
         accent: $('thAccent').value,
         accent2: $('thAccent2').value,

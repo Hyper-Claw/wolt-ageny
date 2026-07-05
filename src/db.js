@@ -55,10 +55,13 @@ export const createPending = (p) =>
 export const getPending = (id) =>
   db.prepare('SELECT * FROM pending WHERE id = ?').get(id);
 
+// Oldest still-pending request with this exact amount (first-requested,
+// first-matched). Amounts are clean/round now, so collisions are possible but
+// rare; markPaid removes a match so the next identical payment takes the next.
 export const matchPending = (asset, expected, ttlMs) =>
   db.prepare(`SELECT * FROM pending
               WHERE asset = ? AND expected = ? AND status = 'pending' AND created_at > ?
-              ORDER BY created_at DESC LIMIT 1`)
+              ORDER BY created_at ASC LIMIT 1`)
     .get(asset, expected, Date.now() - ttlMs);
 
 export const expectedInUse = (asset, expected, ttlMs) =>

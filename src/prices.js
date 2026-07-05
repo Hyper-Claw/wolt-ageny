@@ -52,3 +52,8 @@ export function eurValue(asset, displayAmount, prices) {
 export function usdPrice(asset, prices) {
   return prices[asset.coingecko]?.usd ?? null;
 }
+
+// eurPrice(asset, prices) -> number | null  (price of 1 coin in EUR)
+export function eurPrice(asset, prices) {
+  return prices[asset.coingecko]?.eur ?? null;
+}

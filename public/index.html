@@ -160,6 +160,22 @@
 (async () => {
   const $ = (id) => document.getElementById(id);
 
+  // Robust copy with visible feedback (works on HTTPS; falls back otherwise).
+  async function copyText(text, btn) {
+    const label = btn.textContent;
+    const flash = (ok) => { btn.textContent = ok ? '✓ Copied!' : 'Select & Ctrl+C'; setTimeout(() => { btn.textContent = label; }, 1300); };
+    try {
+      if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return flash(true); }
+      throw new Error('no clipboard');
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.top = '-1000px';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta); flash(ok);
+    }
+  }
+
   // --- apply the configurable theme (title, pig, colors, animation) ---
   const theme = await fetch('/api/theme').then(r => r.json()).catch(() => ({}));
   const pig = theme.pig || '🐷';
@@ -191,14 +207,16 @@
   if (!assetIds.length) { $('err').textContent = 'No donation addresses configured yet.'; $('go').disabled = true; return; }
   const usdcContracts = cfg.usdcContracts || {};
 
-  // Live USD price per coin, for the dollar preset buttons.
-  const usdPrices = await fetch('/api/prices').then(r => r.json()).catch(() => ({}));
-  const PRESET_USD = [10, 25, 50, 100];
+  // Live prices per coin (USD + EUR), for the fiat preset buttons.
+  const prices = await fetch('/api/prices').then(r => r.json()).catch(() => ({}));
+  const PRESETS = [10, 25, 50, 100];
+  const fiat = theme.currency === 'EUR' ? 'eur' : 'usd';
+  const sym = fiat === 'eur' ? '€' : '$';
 
-  function usdToCoin(usd, id) {
-    const price = usdPrices[id];
+  function fiatToCoin(amount, id) {
+    const price = prices[id]?.[fiat];
     if (!price) return null;
-    const coin = usd / price;
+    const coin = amount / price;
     if (coin >= 1) return (Math.round(coin * 100) / 100).toString();
     return coin.toPrecision(4).replace(/\.?0+$/, '');
   }
@@ -218,15 +236,15 @@
     const a = cfg.assets[asset];
     $('symbol').textContent = a.symbol;
     $('presets').innerHTML = '';
-    for (const usd of PRESET_USD) {
-      const coin = usdToCoin(usd, asset);
+    for (const amt of PRESETS) {
+      const coin = fiatToCoin(amt, asset);
       const btn = document.createElement('button');
       if (coin) {
-        btn.textContent = `$${usd}`;
+        btn.textContent = `${sym}${amt}`;
         btn.title = `${coin} ${a.symbol}`;
         btn.onclick = () => { $('amount').value = coin; };
       } else {
-        const fallback = (a.presets ?? [])[PRESET_USD.indexOf(usd)] ?? String(usd);
+        const fallback = (a.presets ?? [])[PRESETS.indexOf(amt)] ?? String(amt);
         btn.textContent = fallback;
         btn.onclick = () => { $('amount').value = fallback; };
       }
@@ -258,8 +276,8 @@
     $('qr').src = data.qr;
     $('payaddr').textContent = data.recipient;
     $('expiry').textContent = `This request expires in ${data.expiresInMin} minutes.`;
-    $('copy-amount').onclick = () => navigator.clipboard.writeText(data.amount);
-    $('copy-addr').onclick = () => navigator.clipboard.writeText(data.recipient);
+    $('copy-amount').onclick = (e) => copyText(data.amount, e.currentTarget);
+    $('copy-addr').onclick = (e) => copyText(data.recipient, e.currentTarget);
 
     // "Send on any network" reassurance for EVM assets
     const meta = cfg.assets[asset];
