@@ -165,6 +165,7 @@
           ${t.soundUrl ? '🎵 ' + (t.soundName || 'custom sound') : 'no custom sound — using the built-in one'}
         </div>
         <div class="row" style="margin-top:10px">
+          <button class="btn ghost" data-testtier="${i}">🔔 Test this tier on stream</button>
           <button class="btn ghost" data-rm="${i}">Remove tier</button>
         </div>`;
       $('tiers').appendChild(div);
@@ -208,6 +209,25 @@
     // clear a tier's custom sound
     $('tiers').querySelectorAll('[data-clearsound]').forEach(b => {
       b.onclick = () => { const i = +b.dataset.clearsound; tiers[i].soundUrl = ''; tiers[i].soundName = ''; renderTiers(); };
+    });
+    // fire a test alert to the overlay using this tier's current (even unsaved) look/sound
+    $('tiers').querySelectorAll('[data-testtier]').forEach(b => {
+      b.onclick = async () => {
+        const t = tiers[+b.dataset.testtier];
+        const admin = $('adminKey').value.trim();
+        if (!admin) { setStatus('Enter your admin key (top of page) to test.', false); return; }
+        const eur = Number(t.minEur) || 1;
+        const res = await fetch('/api/test-alert', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-admin-key': admin },
+          body: JSON.stringify({
+            name: 'TestDonor', message: `Testing the €${eur}+ tier 🐷`,
+            eur, amount: String(eur), symbol: 'USDC',
+            tier: { color: t.color || '', gif: t.gif || '', sound: t.soundUrl || t.sound || '' },
+          }),
+        });
+        setStatus(res.ok ? `✔ Sent €${eur}+ tier test to your overlay.` : '✗ Failed (check admin key).', res.ok);
+      };
     });
   }
   $('addTier').onclick = () => { tiers.push({ minEur:10, color:'', gif:'', sound:'', soundUrl:'', soundName:'' }); renderTiers(); };

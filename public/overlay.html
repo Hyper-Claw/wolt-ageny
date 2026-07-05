@@ -113,7 +113,7 @@
     if (showing || !queue.length) return;
     showing = true;
     const a = queue.shift();
-    const tier = tierFor(a.eur);
+    const tier = a.testTier || tierFor(a.eur);
 
     el.box.style.setProperty('--tier', tier?.color || defaultColor);
     el.box.style.setProperty('--glow', (tier?.color || defaultColor) + '80');

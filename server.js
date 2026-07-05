@@ -260,12 +260,19 @@ app.post('/api/theme', adminAuth, (req, res) => {
 });
 
 app.post('/api/test-alert', adminAuth, (req, res) => {
-  const eur = Number(req.body?.eur) || 25;
+  const b = req.body ?? {};
+  const eur = Number(b.eur) || 25;
+  // Optional tier override so a specific tier's look/sound can be tested even
+  // before it's been saved.
+  const tier = b.tier ? {
+    color: String(b.tier.color ?? ''), gif: String(b.tier.gif ?? ''), sound: String(b.tier.sound ?? ''),
+  } : null;
   broadcast({
-    type: 'donation', asset: 'eth', symbol: 'ETH',
-    amount: req.body?.amount || '0.01', eur,
-    name: req.body?.name || 'TestDonor',
-    message: req.body?.message || 'This is a test alert — looking good!',
+    type: 'donation', asset: 'usdc', symbol: b.symbol || 'USDC',
+    amount: b.amount || String(eur), eur,
+    name: b.name || 'TestDonor',
+    message: b.message || 'This is a test alert — looking good!',
+    testTier: tier,
     txid: 'test', total: totalEur().total,
   });
   res.json({ ok: true });
