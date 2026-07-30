@@ -86,9 +86,9 @@
   .topup{padding:9px 13px;background:transparent;border:1px dashed var(--brass-lo);color:var(--brass-2);font-size:11px;text-transform:uppercase}
   .topup:hover{border-color:var(--brass);background:rgba(201,150,47,.1)}
 
-  .stage{padding:clamp(12px,2.2vw,24px);flex:1}
-  .view{display:none;animation:fade .25s ease both} .view.on{display:block}
-  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .stage{padding:clamp(12px,2.2vw,24px);padding-bottom:140px;flex:1}
+  .view{display:none} .view.on{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
   .vhead{margin-bottom:12px}
   .vhead h2{margin:0;font-family:var(--serif);font-size:clamp(21px,3.4vw,28px);font-weight:800;letter-spacing:.01em;color:var(--bone)}
   .vhead p{margin:3px 0 0;color:var(--dim);font-size:13px}
@@ -139,15 +139,18 @@
     color:var(--gold);text-shadow:0 1px 4px #000;pointer-events:none;animation:rise 1.2s ease-out forwards;z-index:5}
   @keyframes rise{0%{opacity:0;transform:translate(-50%,4px)}18%{opacity:1}100%{opacity:0;transform:translate(-50%,-28px)}}
 
-  /* ===== DRILL DECK (fixed hero button) ===== */
-  .deck{margin-top:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center}
-  .drillbtn{position:relative;padding:20px 40px;font-family:var(--serif);font-size:22px;letter-spacing:.04em;text-transform:uppercase;
+  /* ===== DRILL DECK (fixed floating control bar) ===== */
+  .deck{position:fixed;left:0;right:0;bottom:18px;z-index:25;display:flex;justify-content:center;pointer-events:none;padding:0 12px}
+  .deckpanel{pointer-events:auto;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;max-width:100%;
+    background:linear-gradient(180deg,rgba(44,29,16,.97),rgba(28,18,10,.97));border:2px solid var(--brass-lo);border-radius:18px;
+    padding:12px 18px;box-shadow:0 16px 38px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,220,150,.12);backdrop-filter:blur(6px)}
+  .drillbtn{position:relative;padding:18px 40px;font-family:var(--serif);font-size:22px;letter-spacing:.04em;text-transform:uppercase;
     color:#3a1e02;border-radius:16px;background:linear-gradient(180deg,#ffdf7e,#f0a92a 55%,#c17d12);
     box-shadow:0 12px 0 -2px #8a5a10,0 16px 30px -8px rgba(240,169,42,.6),inset 0 2px 0 rgba(255,255,255,.6);border:2px solid #7a5312}
   .drillbtn:not(:disabled):hover{filter:brightness(1.06)}
   .drillbtn:active{transform:translateY(4px);box-shadow:0 8px 0 -2px #8a5a10,0 10px 20px -8px rgba(240,169,42,.6),inset 0 2px 0 rgba(255,255,255,.6)}
   .drillbtn .c{display:block;font:800 10px/1 var(--sans);letter-spacing:.16em;margin-top:6px;color:rgba(58,30,2,.72)}
-  .strike{width:min(260px,80%)}
+  .strike{width:min(230px,46vw)}
   .strike .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
   .strike .lab{font:800 9px/1 var(--serif);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
   .strike .cnt{font-family:var(--mono);font-size:11px;color:var(--dim)}
@@ -250,6 +253,9 @@
     .nav button{flex-direction:column;gap:3px;font-size:9.5px;padding:7px 4px;letter-spacing:.03em;text-align:center;position:relative}
     .nav button svg{width:21px;height:21px} .nav .badge{position:absolute;top:2px;right:8px;margin:0}
     .main{padding-bottom:66px} .today{display:none}
+    .deck{bottom:74px} .stage{padding-bottom:150px}
+    .deckpanel{width:100%;padding:10px 12px;gap:10px}
+    .drillbtn{padding:16px 28px;font-size:19px} .strike{width:min(180px,42vw)}
   }
 </style>
 
@@ -279,14 +285,14 @@
       <section class="view on" id="view-field">
         <div class="vhead"><h2>The Field</h2><p>Drill a well. It pumps cash on its own. Match two of the same to strike bigger.</p></div>
         <div class="fieldwrap"><div class="field"><div class="plaque">⛏ Section 12 · Aerial</div><div class="grid" id="grid"></div></div></div>
-        <div class="deck">
+        <p class="howto"><b>Drill</b> to strike a well · wells <b>pump cash</b> for you · drag <span class="g">two of the same together to merge</span> into a bigger one · tap a well to <span class="c">cash out</span>.</p>
+        <div class="deck"><div class="deckpanel">
           <button class="drillbtn" id="drillBtn">Drill<span class="c" id="drillCost">First one free</span></button>
           <div class="strike" id="strikeBox">
             <div class="row"><span class="lab">Strike meter</span><span class="cnt" id="strikeCnt">0 / 12</span></div>
             <div class="strikebar"><div class="strikefill" id="strikeFill"></div></div>
           </div>
-        </div>
-        <p class="howto"><b>Drill</b> to strike a well · wells <b>pump cash</b> for you · drag <span class="g">two of the same together to merge</span> into a bigger one · tap a well to <span class="c">cash out</span>.</p>
+        </div></div>
       </section>
 
       <!-- WELLS -->
