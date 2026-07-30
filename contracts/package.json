@@ -7,6 +7,9 @@
     "build": "hardhat compile",
     "test": "hardhat test",
     "deploy:arc": "hardhat run scripts/deploy.ts --network arcTestnet",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "seed:local": "hardhat run scripts/seed.ts --network localhost",
+    "demo": "hardhat run scripts/demo.ts",
     "node": "hardhat node"
   },
   "devDependencies": {

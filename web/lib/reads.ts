@@ -1,5 +1,5 @@
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
-import { arcTestnet } from "./chain";
+import { activeChain } from "./chain";
 import { launchpadAbi } from "./abi";
 import { LAUNCHPAD_ADDRESS, DEPLOY_BLOCK } from "./contracts";
 
@@ -11,7 +11,7 @@ const tradeEvent = parseAbiItem(
 );
 
 export const publicClient = createPublicClient({
-  chain: arcTestnet,
+  chain: activeChain,
   transport: http(),
 });
 

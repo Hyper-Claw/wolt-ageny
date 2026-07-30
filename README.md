@@ -28,6 +28,12 @@ web/         Next.js 14 + wagmi/viem — the launchpad UI
 | Creator earnings / platform fees              | 1% trade fee, split platform/creator (configurable)               |
 | Graduation + liquidity lock/migration         | Auto-graduation, locked liquidity, migrator-only DEX migration    |
 
+## Try it locally (no real funds)
+
+Want to click through the whole thing in your browser? See **[LOCAL.md](./LOCAL.md)** — a local
+Hardhat chain + seeded demo coins + the app, in three commands. Or watch the lifecycle in the
+terminal with `cd contracts && npm run demo`.
+
 ## Smart contracts
 
 - **`LaunchToken.sol`** — a fixed-supply ERC20 (1B). The full supply is minted to the launchpad; there

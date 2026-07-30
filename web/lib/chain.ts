@@ -27,3 +27,23 @@ export const arcTestnet = defineChain({
   },
   testnet: true,
 });
+
+/**
+ * Local Hardhat node (chain id 31337). Native symbol is labelled USDC to match
+ * the app even though it's just the local test gas token.
+ */
+export const hardhatLocal = defineChain({
+  id: 31337,
+  name: "Localhost (Hardhat)",
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  rpcUrls: {
+    default: { http: [process.env.NEXT_PUBLIC_LOCAL_RPC ?? "http://127.0.0.1:8545"] },
+  },
+  testnet: true,
+});
+
+/**
+ * The chain the app talks to. Set NEXT_PUBLIC_CHAIN=local in web/.env.local to
+ * target a local Hardhat node; anything else (default) targets Arc testnet.
+ */
+export const activeChain = process.env.NEXT_PUBLIC_CHAIN === "local" ? hardhatLocal : arcTestnet;
