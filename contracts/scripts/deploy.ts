@@ -1,44 +1,50 @@
 import { ethers, network } from "hardhat";
+import { deployV3, deployLaunchpad, v3Addrs, ECON } from "./v3";
 
 /**
- * Deploys ArcLaunchpad with default pump.fun-style curve parameters.
+ * Deploys ArcLaunchpad (Uniswap V3 based).
  *
- * Native amounts are denominated in the chain's native gas token (USDC on Arc),
- * assuming 18-decimal native units. Tune `virtualNative` / `virtualToken` /
- * `curveSupply` if the target network uses different native decimals.
+ * Uses an existing Uniswap V3 deployment if all of POSITION_MANAGER, SWAP_ROUTER,
+ * V3_FACTORY and WNATIVE are set in the environment (the case for a live network
+ * like Arc mainnet). Otherwise it deploys a fresh local V3 stack (dev / testing).
+ *
+ * Curve economics come from ECON in scripts/v3.ts — tune there before a live deploy.
  */
 async function main() {
   const [deployer] = await ethers.getSigners();
-  console.log(`Deploying on network "${network.name}" with ${deployer.address}`);
+  console.log(`Deploying on "${network.name}" with ${deployer.address}`);
 
-  const totalSupply = ethers.parseEther("1000000000"); // 1B
-  const curveSupply = ethers.parseEther("800000000"); // 800M sold on curve
-  const virtualNative = ethers.parseEther("30"); // seeds start price
-  const virtualToken = ethers.parseEther("1073000000"); // virtual token reserve
-  const tradeFeeBps = 100n; // 1% trade fee
-  const creatorFeeShareBps = 5000n; // creator gets 50% of the fee
-  const creationFee = 0n; // free launches
-  const feeRecipient = process.env.FEE_RECIPIENT ?? deployer.address;
+  const env = process.env;
+  let addrs: { npm: string; router: string; factory: string; wnative: string };
 
-  const Launchpad = await ethers.getContractFactory("ArcLaunchpad");
-  const launchpad = await Launchpad.deploy(
-    totalSupply,
-    curveSupply,
-    virtualNative,
-    virtualToken,
-    tradeFeeBps,
-    creatorFeeShareBps,
-    creationFee,
-    feeRecipient
-  );
-  await launchpad.waitForDeployment();
+  if (env.POSITION_MANAGER && env.SWAP_ROUTER && env.V3_FACTORY && env.WNATIVE) {
+    addrs = {
+      npm: env.POSITION_MANAGER,
+      router: env.SWAP_ROUTER,
+      factory: env.V3_FACTORY,
+      wnative: env.WNATIVE,
+    };
+    console.log("Using configured Uniswap V3 deployment:", addrs);
+  } else {
+    console.log("No V3 env addresses set — deploying a local Uniswap V3 stack.");
+    const v3 = await deployV3(deployer);
+    addrs = await v3Addrs(v3);
+    console.log("Deployed local V3:", addrs);
+  }
 
-  const address = await launchpad.getAddress();
-  console.log(`ArcLaunchpad deployed at: ${address}`);
-  console.log("Set NEXT_PUBLIC_LAUNCHPAD_ADDRESS in web/.env.local to this address.");
+  const feeRecipient = env.FEE_RECIPIENT ?? deployer.address;
+  const lp = await deployLaunchpad(addrs, feeRecipient);
+  const lpAddr = await lp.getAddress();
+  const lockerAddr = await lp.locker();
+
+  console.log(`\nArcLaunchpad: ${lpAddr}`);
+  console.log(`Locker:       ${lockerAddr}`);
+  console.log(`WNative:      ${addrs.wnative}`);
+  console.log("\nSet NEXT_PUBLIC_LAUNCHPAD_ADDRESS in web/.env.local to the launchpad address.");
+  console.log(`Economics: fee=${ECON.poolFee} ticks=[${ECON.tickLower},${ECON.tickUpper}] gradThreshold=${ethers.formatEther(ECON.graduationThreshold)}`);
 }
 
-main().catch((error) => {
-  console.error(error);
+main().catch((e) => {
+  console.error(e);
   process.exitCode = 1;
 });

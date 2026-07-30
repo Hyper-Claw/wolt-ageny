@@ -1,41 +1,41 @@
 import { createPublicClient, http, parseAbiItem, type Address } from "viem";
 import { activeChain } from "./chain";
-import { launchpadAbi } from "./abi";
+import { launchpadAbi, erc20Abi } from "./abi";
 import { LAUNCHPAD_ADDRESS, DEPLOY_BLOCK } from "./contracts";
 
+export const publicClient = createPublicClient({ chain: activeChain, transport: http() });
+
 const tokenLaunchedEvent = parseAbiItem(
-  "event TokenLaunched(address indexed token, address indexed creator, string name, string symbol, string uri, string description, string twitter, string telegram, string website, uint256 timestamp)"
+  "event TokenLaunched(address indexed token, address indexed creator, string name, string symbol, string logo, address pool, uint256 timestamp)"
 );
 const tradeEvent = parseAbiItem(
-  "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 nativeAmount, uint256 tokenAmount, uint256 feePaid, uint256 newTokensSold, uint256 newRealNativeReserve, uint256 timestamp)"
+  "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 nativeAmount, uint256 tokenAmount, uint256 timestamp)"
 );
 
-export const publicClient = createPublicClient({
-  chain: activeChain,
-  transport: http(),
-});
+const launchpad = { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi } as const;
 
 export type TokenMeta = {
   token: Address;
   creator: Address;
   name: string;
   symbol: string;
-  uri: string;
+  uri: string; // logo
+  pool: Address;
   description: string;
   twitter: string;
   telegram: string;
+  discord: string;
   website: string;
+  farcaster: string;
   createdAt: number;
 };
 
 export type CurveState = {
-  realNativeReserve: bigint;
-  tokensSold: bigint;
-  graduated: boolean;
-  createdAt: bigint;
   spotPrice: bigint;
   marketCap: bigint;
   progressBps: bigint;
+  principal: bigint;
+  graduated: boolean;
 };
 
 export type TradeRow = {
@@ -47,9 +47,7 @@ export type TradeRow = {
   txHash: string;
 };
 
-const launchpadContract = { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi } as const;
-
-/** Fetch all launched tokens (newest-first) from TokenLaunched logs. */
+/** All launched tokens (newest-first) from TokenLaunched logs. */
 export async function fetchTokenList(): Promise<TokenMeta[]> {
   const logs = await publicClient.getLogs({
     address: LAUNCHPAD_ADDRESS,
@@ -57,77 +55,93 @@ export async function fetchTokenList(): Promise<TokenMeta[]> {
     fromBlock: DEPLOY_BLOCK,
     toBlock: "latest",
   });
-  const metas: TokenMeta[] = logs.map((log) => {
+  const metas = logs.map((log) => {
     const a = log.args;
     return {
       token: a.token as Address,
       creator: a.creator as Address,
       name: a.name ?? "",
       symbol: a.symbol ?? "",
-      uri: a.uri ?? "",
-      description: a.description ?? "",
-      twitter: a.twitter ?? "",
-      telegram: a.telegram ?? "",
-      website: a.website ?? "",
+      uri: a.logo ?? "",
+      pool: (a.pool as Address) ?? "0x0000000000000000000000000000000000000000",
+      description: "",
+      twitter: "",
+      telegram: "",
+      discord: "",
+      website: "",
+      farcaster: "",
       createdAt: Number(a.timestamp ?? 0n),
-    };
+    } as TokenMeta;
   });
-  return metas.reverse(); // newest-first
+  return metas.reverse();
 }
 
+/** Base list entry augmented with rich metadata read from the token itself. */
 export async function fetchTokenMeta(token: Address): Promise<TokenMeta | null> {
   const list = await fetchTokenList();
-  return list.find((t) => t.token.toLowerCase() === token.toLowerCase()) ?? null;
+  const base = list.find((t) => t.token.toLowerCase() === token.toLowerCase());
+  if (!base) return null;
+  try {
+    const [description, socials] = await Promise.all([
+      publicClient.readContract({ address: token, abi: erc20Abi, functionName: "description" }),
+      publicClient.readContract({ address: token, abi: erc20Abi, functionName: "socials" }),
+    ]);
+    const s = socials as readonly [string, string, string, string, string];
+    return {
+      ...base,
+      description: description as string,
+      twitter: s[0],
+      telegram: s[1],
+      discord: s[2],
+      website: s[3],
+      farcaster: s[4],
+    };
+  } catch {
+    return base;
+  }
 }
 
 export type TokenWithCurve = { meta: TokenMeta; curve: CurveState | null };
 
-/** Fetch every token together with its live curve state (for the Explore grid). */
+/** Every token with its live curve state (for the Explore grid). */
 export async function fetchTokensWithCurves(): Promise<TokenWithCurve[]> {
   const metas = await fetchTokenList();
   const curves = await Promise.all(metas.map((m) => fetchCurve(m.token).catch(() => null)));
   return metas.map((meta, i) => ({ meta, curve: curves[i] }));
 }
 
-/** Read live curve state for a token. */
 export async function fetchCurve(token: Address): Promise<CurveState> {
-  const [curve, spotPrice, marketCap, progressBps] = await Promise.all([
-    publicClient.readContract({ ...launchpadContract, functionName: "curves", args: [token] }),
-    publicClient.readContract({ ...launchpadContract, functionName: "spotPrice", args: [token] }),
-    publicClient.readContract({ ...launchpadContract, functionName: "marketCap", args: [token] }),
-    publicClient.readContract({ ...launchpadContract, functionName: "progressBps", args: [token] }),
+  const [spotPrice, marketCap, progressBps, grad] = await Promise.all([
+    publicClient.readContract({ ...launchpad, functionName: "spotPrice", args: [token] }),
+    publicClient.readContract({ ...launchpad, functionName: "marketCap", args: [token] }),
+    publicClient.readContract({ ...launchpad, functionName: "progressBps", args: [token] }),
+    publicClient.readContract({ ...launchpad, functionName: "graduationStatus", args: [token] }),
   ]);
-  const c = curve as readonly [Address, Address, bigint, bigint, boolean, bigint];
+  const g = grad as readonly [bigint, bigint, boolean];
   return {
-    realNativeReserve: c[2],
-    tokensSold: c[3],
-    graduated: c[4],
-    createdAt: c[5],
     spotPrice: spotPrice as bigint,
     marketCap: marketCap as bigint,
     progressBps: progressBps as bigint,
+    principal: g[0],
+    graduated: g[2],
   };
 }
 
+/** Estimate tokens out for a native input (spot-based; on-chain minOut guards slippage). */
 export async function calcBuy(token: Address, grossIn: bigint): Promise<bigint> {
   if (grossIn <= 0n) return 0n;
-  return (await publicClient.readContract({
-    ...launchpadContract,
-    functionName: "calcBuy",
-    args: [token, grossIn],
-  })) as bigint;
+  const price = (await publicClient.readContract({ ...launchpad, functionName: "spotPrice", args: [token] })) as bigint;
+  if (price === 0n) return 0n;
+  return (grossIn * 10n ** 18n) / price;
 }
 
+/** Estimate native out for a token input (spot-based). */
 export async function calcSell(token: Address, tokenAmount: bigint): Promise<bigint> {
   if (tokenAmount <= 0n) return 0n;
-  return (await publicClient.readContract({
-    ...launchpadContract,
-    functionName: "calcSell",
-    args: [token, tokenAmount],
-  })) as bigint;
+  const price = (await publicClient.readContract({ ...launchpad, functionName: "spotPrice", args: [token] })) as bigint;
+  return (tokenAmount * price) / 10n ** 18n;
 }
 
-/** Fetch recent trades for a token from Trade logs (newest-first). */
 export async function fetchTrades(token: Address): Promise<TradeRow[]> {
   const logs = await publicClient.getLogs({
     address: LAUNCHPAD_ADDRESS,
@@ -136,7 +150,7 @@ export async function fetchTrades(token: Address): Promise<TradeRow[]> {
     fromBlock: DEPLOY_BLOCK,
     toBlock: "latest",
   });
-  const rows: TradeRow[] = logs.map((log) => {
+  const rows = logs.map((log) => {
     const a = log.args;
     return {
       trader: a.trader as Address,

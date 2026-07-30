@@ -1,52 +1,41 @@
 import { ethers, network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
+import { deployV3, deployLaunchpad, v3Addrs } from "./v3";
 
 /**
- * Deploys ArcLaunchpad to a local Hardhat node and seeds it with demo coins and
- * some trades, so the web app's Explore page is populated for local testing.
- *
- * Run against a running `npm run node`:
+ * Local-only: deploy a full Uniswap V3 stack + ArcLaunchpad, seed demo coins with
+ * trades (and graduate one), and auto-write web/.env.local. Run against a node:
  *   npm run seed:local
- *
- * On a fresh node this is the FIRST deployment, so the launchpad address is
- * deterministic: 0x5FbDB2315678afecb367f032d93F642f64180aa3
  */
 async function main() {
   if (network.name !== "localhost" && network.name !== "hardhat") {
-    throw new Error(`seed.ts is for local testing only (got network "${network.name}")`);
+    throw new Error(`seed.ts is local-only (got "${network.name}")`);
   }
-
   const [deployer, alice, bob, carol] = await ethers.getSigners();
 
-  const Launchpad = await ethers.getContractFactory("ArcLaunchpad");
-  const lp = await Launchpad.deploy(
-    ethers.parseEther("1000000000"),
-    ethers.parseEther("800000000"),
-    ethers.parseEther("30"),
-    ethers.parseEther("1073000000"),
-    100n,
-    5000n,
-    0n,
-    deployer.address
-  );
-  await lp.waitForDeployment();
+  const v3 = await deployV3(deployer);
+  const lp = await deployLaunchpad(await v3Addrs(v3), deployer.address, {
+    graduationThreshold: ethers.parseEther("3"),
+  });
   const address = await lp.getAddress();
-
   const deadline = () => Math.floor(Date.now() / 1000) + 600;
+
+  const socials = (t: string, w: string) => ({ twitter: t, telegram: "", discord: "", website: w, farcaster: "" });
   const coins = [
-    { s: alice, name: "Arc Doge", sym: "ADOGE", uri: "", desc: "The first dog on Arc.", buys: ["3", "2"] },
-    { s: bob, name: "Circle Cat", sym: "MEOW", uri: "", desc: "Nine lives, sub-second finality.", buys: ["8", "12"] },
-    { s: carol, name: "USDC Pepe", sym: "UPEPE", uri: "", desc: "Rare. Stable. Frog.", buys: ["1"] },
-    { s: alice, name: "Malachite", sym: "MALA", uri: "", desc: "Consensus, but make it a coin.", buys: [] },
-    { s: bob, name: "Gas Money", sym: "GAS", uri: "", desc: "Pays for itself.", buys: ["20"] },
+    { s: alice, name: "Arc Doge", symbol: "ADOGE", desc: "The first dog on Arc.", buys: ["0.3", "0.2"] },
+    { s: bob, name: "Circle Cat", symbol: "MEOW", desc: "Nine lives, sub-second finality.", buys: ["0.8", "1.2"] },
+    { s: carol, name: "USDC Pepe", symbol: "UPEPE", desc: "Rare. Stable. Frog.", buys: ["0.1"] },
+    { s: alice, name: "Malachite", symbol: "MALA", desc: "Consensus, but make it a coin.", buys: [] },
+    { s: bob, name: "Gas Money", symbol: "GAS", desc: "Pays for itself.", buys: ["2"] },
   ];
 
   const launched: string[] = [];
+  const traders = [alice, bob, carol];
   for (const c of coins) {
     const tx = await lp
       .connect(c.s)
-      .launch(c.name, c.sym, c.uri, c.desc, "https://x.com/arc", "", "https://arc.io", 0n);
+      .launch({ name: c.name, symbol: c.symbol, logo: "", description: c.desc, socials: socials("https://x.com/arc", "https://arc.io") });
     const rc = await tx.wait();
     let token = "";
     for (const log of rc!.logs) {
@@ -58,20 +47,16 @@ async function main() {
       }
     }
     launched.push(token);
-    const traders = [alice, bob, carol];
     for (let i = 0; i < c.buys.length; i++) {
-      await lp.connect(traders[i % traders.length]).buy(token, 0n, deadline(), {
-        value: ethers.parseEther(c.buys[i]),
-      });
+      await lp.connect(traders[i % traders.length]).buy(token, 0n, deadline(), { value: ethers.parseEther(c.buys[i]) });
     }
-    console.log(`launched ${c.sym.padEnd(6)} → ${token}  (${c.buys.length} buys)`);
+    console.log(`launched ${c.symbol.padEnd(6)} → ${token}  (${c.buys.length} buys)`);
   }
 
-  // Graduate the first coin so the Graduated section is populated in demos.
-  await lp.connect(bob).buy(launched[0], 0n, deadline(), { value: ethers.parseEther("500") });
-  console.log(`graduated ${coins[0].sym} (${launched[0]})`);
+  // Graduate the first coin so the Graduated section is populated.
+  await lp.connect(bob).buy(launched[0], 0n, deadline(), { value: ethers.parseEther("4") });
+  console.log(`graduated ${coins[0].symbol} (${launched[0]})`);
 
-  // Convenience: write web/.env.local automatically so there's nothing to copy.
   const envLine = `NEXT_PUBLIC_CHAIN=local\nNEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}\n`;
   const webEnvPath = path.resolve(process.cwd(), "..", "web", ".env.local");
   let wrote = false;
@@ -81,18 +66,15 @@ async function main() {
       wrote = true;
     }
   } catch {
-    /* fall back to printing below */
+    /* ignore */
   }
 
   console.log("\n────────────────────────────────────────────────────────────");
   console.log(`ArcLaunchpad deployed at: ${address}`);
   if (wrote) {
-    console.log(`\n✔ Wrote web/.env.local for you. Now just run the web app:`);
-    console.log(`    cd ../web && npm run dev`);
+    console.log(`\n✔ Wrote web/.env.local. Now run the web app:  cd ../web && npm run dev`);
   } else {
-    console.log(`\nPut these in web/.env.local, then run \`npm run dev\` in web/:`);
-    console.log(`  NEXT_PUBLIC_CHAIN=local`);
-    console.log(`  NEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}`);
+    console.log(`\nSet in web/.env.local:\n  NEXT_PUBLIC_CHAIN=local\n  NEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}`);
   }
   console.log("────────────────────────────────────────────────────────────\n");
 }

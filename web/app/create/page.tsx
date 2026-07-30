@@ -24,7 +24,9 @@ export default function CreatePage() {
     description: "",
     twitter: "",
     telegram: "",
+    discord: "",
     website: "",
+    farcaster: "",
     devBuy: "",
   });
   const [status, setStatus] = useState<string>("");
@@ -52,18 +54,23 @@ export default function CreatePage() {
         ...launchpad,
         functionName: "launch",
         args: [
-          form.name,
-          form.symbol,
-          form.uri,
-          form.description,
-          form.twitter,
-          form.telegram,
-          form.website,
-          0n,
+          {
+            name: form.name,
+            symbol: form.symbol,
+            logo: form.uri,
+            description: form.description,
+            socials: {
+              twitter: form.twitter,
+              telegram: form.telegram,
+              discord: form.discord,
+              website: form.website,
+              farcaster: form.farcaster,
+            },
+          },
         ],
         value,
       });
-      setStatus("Deploying token + curve on Arc…");
+      setStatus("Deploying token + V3 pool on Arc…");
       const receipt = await waitForTransactionReceipt(config, { hash });
 
       // Pull the new token address out of the TokenLaunched event.
@@ -123,15 +130,21 @@ export default function CreatePage() {
             maxLength={500}
           />
         </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Twitter">
             <input className="input" placeholder="https://x.com/…" value={form.twitter} onChange={set("twitter")} />
           </Field>
           <Field label="Telegram">
             <input className="input" placeholder="https://t.me/…" value={form.telegram} onChange={set("telegram")} />
           </Field>
+          <Field label="Discord">
+            <input className="input" placeholder="https://discord.gg/…" value={form.discord} onChange={set("discord")} />
+          </Field>
           <Field label="Website">
             <input className="input" placeholder="https://…" value={form.website} onChange={set("website")} />
+          </Field>
+          <Field label="Farcaster">
+            <input className="input" placeholder="https://warpcast.com/…" value={form.farcaster} onChange={set("farcaster")} />
           </Field>
         </div>
         <Field label="Dev buy (optional)" hint="USDC of your own to buy on the curve at launch">

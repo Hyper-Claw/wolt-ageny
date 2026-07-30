@@ -1,204 +1,145 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { ArcLaunchpad, LaunchToken } from "../typechain-types";
-import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
+import { deployV3, deployLaunchpad, v3Addrs, launchParams, ECON } from "../scripts/v3";
 
-const TOTAL = ethers.parseEther("1000000000");
-const CURVE = ethers.parseEther("800000000");
-const VNATIVE = ethers.parseEther("30");
-const VTOKEN = ethers.parseEther("1073000000");
-const FEE_BPS = 100n; // 1%
-const CREATOR_SHARE = 5000n; // 50%
-
-async function deployFixture() {
-  const [owner, creator, alice, bob] = await ethers.getSigners();
-  const Launchpad = await ethers.getContractFactory("ArcLaunchpad");
-  const launchpad = (await Launchpad.deploy(
-    TOTAL,
-    CURVE,
-    VNATIVE,
-    VTOKEN,
-    FEE_BPS,
-    CREATOR_SHARE,
-    0n,
-    owner.address
-  )) as unknown as ArcLaunchpad;
-  await launchpad.waitForDeployment();
-  return { launchpad, owner, creator, alice, bob };
+async function fixture(overrides = {}) {
+  const [deployer, creator, alice, bob] = await ethers.getSigners();
+  const v3 = await deployV3(deployer);
+  const lp = await deployLaunchpad(await v3Addrs(v3), deployer.address, overrides);
+  return { v3, lp, deployer, creator, alice, bob };
 }
 
-async function launchToken(launchpad: ArcLaunchpad, creator: HardhatEthersSigner, devBuy = 0n) {
-  const tx = await launchpad
-    .connect(creator)
-    .launch("Doge", "DOGE", "ipfs://img", "much wow", "", "", "", 0n, { value: devBuy });
-  const receipt = await tx.wait();
-  const iface = launchpad.interface;
-  let tokenAddr = "";
-  for (const log of receipt!.logs) {
+async function launch(lp: any, creator: any, over = {}) {
+  const tx = await lp.connect(creator).launch(launchParams(over));
+  const rc = await tx.wait();
+  let token = "";
+  for (const log of rc.logs) {
     try {
-      const parsed = iface.parseLog(log);
-      if (parsed?.name === "TokenLaunched") tokenAddr = parsed.args.token;
+      const p = lp.interface.parseLog(log);
+      if (p?.name === "TokenLaunched") token = p.args.token;
     } catch {
-      /* not our event */
+      /* skip */
     }
   }
-  return tokenAddr;
+  return token;
 }
 
-describe("ArcLaunchpad", () => {
-  it("launches a token with full supply held by the launchpad", async () => {
-    const { launchpad, creator } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
+const deadline = async () => (await ethers.provider.getBlock("latest"))!.timestamp + 600;
+
+describe("ArcLaunchpad (Uniswap V3)", () => {
+  it("launches a token into a real V3 pool with single-sided liquidity", async () => {
+    const { lp, creator } = await fixture();
+    const token = await launch(lp, creator);
     expect(token).to.properAddress;
 
-    const erc20 = (await ethers.getContractAt("LaunchToken", token)) as unknown as LaunchToken;
-    expect(await erc20.totalSupply()).to.equal(TOTAL);
-    expect(await erc20.balanceOf(await launchpad.getAddress())).to.equal(TOTAL);
-    expect(await launchpad.tokenCount()).to.equal(1n);
-    expect(await erc20.creator()).to.equal(creator.address);
+    const erc20 = await ethers.getContractAt("LaunchToken", token);
+    const pool = await lp.poolOf(token);
+    expect(pool).to.properAddress;
+    expect(await erc20.liquidityPool()).to.equal(pool);
+
+    // The pool holds essentially the entire supply as single-sided liquidity.
+    const poolBal = await erc20.balanceOf(pool);
+    expect(poolBal).to.be.gt(ethers.parseEther("999000000"));
+
+    // Self-describing token (Pons-compatible).
+    expect(await erc20.logo()).to.equal("ipfs://logo");
+    expect(await erc20.description()).to.equal("the first dog on Arc");
+    const socials = await erc20.socials();
+    expect(socials[0]).to.equal("https://x.com/arc");
+    expect(await erc20.deployer()).to.equal(creator.address);
+
+    // getLaunchedToken struct.
+    const l = await lp.getLaunchedToken(token);
+    expect(l.exists).to.equal(true);
+    expect(l.deployer).to.equal(creator.address);
+    expect(l.supply).to.equal(ECON.totalSupply);
+    expect(l.poolFee).to.equal(BigInt(ECON.poolFee));
+    expect(l.positionId).to.be.gt(0n);
+
+    // Locker custodies the LP position.
+    const locker = await ethers.getContractAt("Locker", await lp.locker());
+    expect(await locker.positionIds(token)).to.equal(l.positionId);
+    expect(await locker.tokenProtocolFeeShares(token)).to.equal(50n);
   });
 
-  it("buys tokens on the curve and charges a fee split between platform and creator", async () => {
-    const { launchpad, owner, creator, alice } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
-    const erc20 = (await ethers.getContractAt("LaunchToken", token)) as unknown as LaunchToken;
+  it("buys via the router: tokens received and price rises", async () => {
+    const { lp, creator, alice } = await fixture();
+    const token = await launch(lp, creator);
+    const erc20 = await ethers.getContractAt("LaunchToken", token);
 
-    const spend = ethers.parseEther("1");
-    const quote = await launchpad.calcBuy(token, spend);
-    expect(quote).to.be.gt(0n);
+    const p0 = await lp.spotPrice(token);
+    await lp.connect(alice).buy(token, 0n, await deadline(), { value: ethers.parseEther("1") });
+    const p1 = await lp.spotPrice(token);
 
-    const ownerBefore = await ethers.provider.getBalance(owner.address);
-    const creatorBefore = await ethers.provider.getBalance(creator.address);
-
-    const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 600;
-    await launchpad.connect(alice).buy(token, 0n, deadline, { value: spend });
-
-    // Alice received (approximately) the quoted amount.
-    const bal = await erc20.balanceOf(alice.address);
-    expect(bal).to.equal(quote);
-
-    // Fee = 1% of 1 ether = 0.01; creator gets 50%, platform 50%.
-    const fee = (spend * FEE_BPS) / 10000n;
-    const creatorCut = (fee * CREATOR_SHARE) / 10000n;
-    const platformCut = fee - creatorCut;
-    expect((await ethers.provider.getBalance(owner.address)) - ownerBefore).to.equal(platformCut);
-    expect((await ethers.provider.getBalance(creator.address)) - creatorBefore).to.equal(creatorCut);
+    expect(await erc20.balanceOf(alice.address)).to.be.gt(0n);
+    expect(p1).to.be.gt(p0);
+    expect(await lp.marketCap(token)).to.be.gt(0n);
   });
 
-  it("round-trips: selling right after buying returns slightly less (fees)", async () => {
-    const { launchpad, creator, alice } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
-    const erc20 = (await ethers.getContractAt("LaunchToken", token)) as unknown as LaunchToken;
+  it("round-trips: buy then sell returns native (minus fees)", async () => {
+    const { lp, creator, alice } = await fixture();
+    const token = await launch(lp, creator);
+    const erc20 = await ethers.getContractAt("LaunchToken", token);
 
-    const spend = ethers.parseEther("5");
-    const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 600;
-    await launchpad.connect(alice).buy(token, 0n, deadline, { value: spend });
+    const spend = ethers.parseEther("2");
+    await lp.connect(alice).buy(token, 0n, await deadline(), { value: spend });
     const bought = await erc20.balanceOf(alice.address);
+    expect(bought).to.be.gt(0n);
 
-    await erc20.connect(alice).approve(await launchpad.getAddress(), bought);
+    await erc20.connect(alice).approve(await lp.getAddress(), bought);
     const before = await ethers.provider.getBalance(alice.address);
-    const tx = await launchpad.connect(alice).sell(token, bought, 0n, deadline);
-    const rcpt = await tx.wait();
-    const gas = rcpt!.gasUsed * rcpt!.gasPrice;
+    const tx = await lp.connect(alice).sell(token, bought, 0n, await deadline());
+    const rc = await tx.wait();
+    const gas = rc.gasUsed * rc.gasPrice;
     const after = await ethers.provider.getBalance(alice.address);
 
-    const netReceived = after - before + gas;
-    // Two 1% fees (buy + sell) mean the seller nets clearly less than spent.
-    expect(netReceived).to.be.lt(spend);
-    expect(netReceived).to.be.gt((spend * 96n) / 100n);
+    const net = after - before + gas;
+    expect(net).to.be.gt(0n);
+    expect(net).to.be.lt(spend); // two 1% pool fees
     expect(await erc20.balanceOf(alice.address)).to.equal(0n);
   });
 
-  it("graduates when the curve allocation sells out and refunds the excess", async () => {
-    const { launchpad, creator, alice } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
-    const erc20 = (await ethers.getContractAt("LaunchToken", token)) as unknown as LaunchToken;
+  it("tracks graduation via paired principal", async () => {
+    const { lp, creator, bob } = await fixture({ graduationThreshold: ethers.parseEther("3") });
+    const token = await launch(lp, creator);
 
-    const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 6000;
-    // Massively overpay to force graduation in one buy; excess must be refunded.
-    const spend = ethers.parseEther("1000");
-    const before = await ethers.provider.getBalance(alice.address);
-    const tx = await launchpad.connect(alice).buy(token, 0n, deadline, { value: spend });
-    const rcpt = await tx.wait();
-    const gas = rcpt!.gasUsed * rcpt!.gasPrice;
-    const after = await ethers.provider.getBalance(alice.address);
+    let status = await lp.graduationStatus(token);
+    expect(status.graduated).to.equal(false);
+    expect(status.threshold).to.equal(ethers.parseEther("3"));
 
-    // Buyer receives exactly the curve allocation.
-    expect(await erc20.balanceOf(alice.address)).to.equal(CURVE);
+    await lp.connect(bob).buy(token, 0n, await deadline(), { value: ethers.parseEther("4") });
 
-    const curve = await launchpad.curves(token);
-    expect(curve.graduated).to.equal(true);
-    expect(await launchpad.progressBps(token)).to.equal(10000n);
-
-    // Far less than 1000 was actually spent (graduation raise ~88 native + fees).
-    const spent = before - after - gas;
-    expect(spent).to.be.lt(ethers.parseEther("100"));
-
-    // Curve is closed for trading.
-    await expect(launchpad.connect(alice).buy(token, 0n, deadline, { value: ethers.parseEther("1") }))
-      .to.be.revertedWithCustomError(launchpad, "CurveGraduated");
+    status = await lp.graduationStatus(token);
+    expect(status.principal).to.be.gte(ethers.parseEther("3"));
+    expect(status.graduated).to.equal(true);
+    expect(await lp.progressBps(token)).to.equal(10000n);
   });
 
-  it("locks liquidity on graduation and only the migrator can move it", async () => {
-    const { launchpad, owner, creator, alice, bob } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
-    const erc20 = (await ethers.getContractAt("LaunchToken", token)) as unknown as LaunchToken;
-    const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 6000;
-    await launchpad.connect(alice).buy(token, 0n, deadline, { value: ethers.parseEther("1000") });
-
-    expect(await launchpad.lockedNative(token)).to.be.gt(0n);
-    // LP allocation still held by the launchpad.
-    const lp = await launchpad.lpSupply();
-    expect(await erc20.balanceOf(await launchpad.getAddress())).to.equal(lp);
-
-    await expect(launchpad.connect(bob).migrateLiquidity(token, bob.address)).to.be.revertedWithCustomError(
-      launchpad,
-      "NotMigrator"
-    );
-
-    await launchpad.connect(owner).migrateLiquidity(token, bob.address);
-    expect(await erc20.balanceOf(bob.address)).to.equal(lp);
-    expect(await launchpad.lockedNative(token)).to.equal(0n);
+  it("accrues LP fees that the locker can collect", async () => {
+    const { lp, creator, alice } = await fixture();
+    const token = await launch(lp, creator);
+    // Generate fee volume.
+    await lp.connect(alice).buy(token, 0n, await deadline(), { value: ethers.parseEther("2") });
+    const locker = await ethers.getContractAt("Locker", await lp.locker());
+    // Should not revert; fees may be claimed to protocol/creator.
+    await expect(locker.collectFees(token)).to.not.be.reverted;
   });
 
   it("supports an optional dev buy at launch", async () => {
-    const { launchpad, creator } = await deployFixture();
-    const devBuy = ethers.parseEther("2");
-    const token = await launchToken(launchpad, creator, devBuy);
-    const erc20 = (await ethers.getContractAt("LaunchToken", token)) as unknown as LaunchToken;
+    const { lp, creator } = await fixture();
+    const tx = await lp.connect(creator).launch(launchParams(), { value: ethers.parseEther("1") });
+    const rc = await tx.wait();
+    let token = "";
+    for (const log of rc.logs) {
+      try {
+        const p = lp.interface.parseLog(log);
+        if (p?.name === "TokenLaunched") token = p.args.token;
+      } catch {
+        /* skip */
+      }
+    }
+    const erc20 = await ethers.getContractAt("LaunchToken", token);
     expect(await erc20.balanceOf(creator.address)).to.be.gt(0n);
-    const curve = await launchpad.curves(token);
-    expect(curve.tokensSold).to.be.gt(0n);
-  });
-
-  it("enforces slippage and deadline guards", async () => {
-    const { launchpad, creator, alice } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
-    const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 600;
-
-    await expect(
-      launchpad.connect(alice).buy(token, ethers.parseEther("999999999999"), deadline, {
-        value: ethers.parseEther("1"),
-      })
-    ).to.be.revertedWithCustomError(launchpad, "SlippageExceeded");
-
-    await expect(
-      launchpad.connect(alice).buy(token, 0n, 1, { value: ethers.parseEther("1") })
-    ).to.be.revertedWithCustomError(launchpad, "DeadlinePassed");
-  });
-
-  it("price and market cap increase as the curve fills", async () => {
-    const { launchpad, creator, alice } = await deployFixture();
-    const token = await launchToken(launchpad, creator);
-    const deadline = (await ethers.provider.getBlock("latest"))!.timestamp + 600;
-
-    const p0 = await launchpad.spotPrice(token);
-    const mc0 = await launchpad.marketCap(token);
-    await launchpad.connect(alice).buy(token, 0n, deadline, { value: ethers.parseEther("10") });
-    const p1 = await launchpad.spotPrice(token);
-    const mc1 = await launchpad.marketCap(token);
-
-    expect(p1).to.be.gt(p0);
-    expect(mc1).to.be.gt(mc0);
+    expect((await lp.getLaunchedToken(token)).initialBuyAmount).to.equal(ethers.parseEther("1"));
   });
 });

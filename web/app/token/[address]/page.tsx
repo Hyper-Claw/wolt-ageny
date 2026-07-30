@@ -74,7 +74,9 @@ export default function TokenPage() {
                 {meta?.creator && <span className="text-arc-muted">creator {shortAddr(meta.creator)}</span>}
                 {meta?.twitter && <SocialLink href={meta.twitter} label="twitter" />}
                 {meta?.telegram && <SocialLink href={meta.telegram} label="telegram" />}
+                {meta?.discord && <SocialLink href={meta.discord} label="discord" />}
                 {meta?.website && <SocialLink href={meta.website} label="website" />}
+                {meta?.farcaster && <SocialLink href={meta.farcaster} label="farcaster" />}
               </div>
             </div>
           </div>
@@ -82,7 +84,7 @@ export default function TokenPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Market cap" value={curve ? `${fmtCompact(curve.marketCap)}` : "…"} unit="USDC" />
             <Stat label="Price" value={curve ? fmtPrice(curve.spotPrice) : "…"} unit="USDC" />
-            <Stat label="Raised" value={curve ? fmtCompact(curve.realNativeReserve) : "…"} unit="USDC" />
+            <Stat label="Raised" value={curve ? fmtCompact(curve.principal) : "…"} unit="USDC" />
             <Stat label="Progress" value={`${progress.toFixed(1)}%`} />
           </div>
 
