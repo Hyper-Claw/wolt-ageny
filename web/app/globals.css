@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #0a0b0d;
+  color: #e8ecf2;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #242830;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-green {
+    @apply btn bg-arc-green text-black hover:bg-arc-greenDark;
+  }
+  .btn-ghost {
+    @apply btn border border-arc-border bg-arc-card text-arc-muted hover:text-white hover:border-arc-muted;
+  }
+  .input {
+    @apply w-full rounded-lg border border-arc-border bg-arc-bg px-3 py-2 text-white placeholder:text-arc-muted/60 outline-none focus:border-arc-green;
+  }
+  .card {
+    @apply rounded-xl border border-arc-border bg-arc-card;
+  }
+}
