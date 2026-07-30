@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body>
+<title>WILDCAT — Drilling Console</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --tar:#0b0a07;
+    --panel:#14110b;
+    --panel-2:#1c1810;
+    --raise:#241f15;
+    --line:#33291b;
+    --rivet:#4a3d28;
+    --bone:#efe6d4;
+    --dim:#a2957c;
+    --faint:#6f6551;
+    --amber:#f4a91f;
+    --amber-2:#ffc24d;
+    --amber-glow:rgba(244,169,31,.45);
+    --blowout:#ff4b1a;
+    --oxide:#54c39a;
+    --dry:#8f8168;
+    --marg:#c39a41;
+    --prod:#54c39a;
+    --gush:#f4a91f;
+    --leg:#ff4b1a;
+
+    --mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #1a160e 0%, transparent 60%),
+      radial-gradient(900px 900px at 100% 120%, #17130c 0%, transparent 55%),
+      var(--tar);
+    color:var(--bone);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+    min-height:100vh;
+    padding:clamp(12px,3vw,32px);
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* ---------- type ---------- */
+  .eyebrow{font:700 11px/1 var(--sans);letter-spacing:.28em;text-transform:uppercase;color:var(--faint)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  h1,h2,h3{margin:0;text-wrap:balance}
+
+  /* ---------- header ---------- */
+  header{
+    display:flex;flex-wrap:wrap;align-items:flex-end;gap:18px 26px;
+    padding-bottom:18px;margin-bottom:22px;border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:14px;margin-right:auto}
+  .mark{
+    width:46px;height:46px;flex:0 0 auto;position:relative;
+    background:linear-gradient(160deg,#2a2214,#120e08);
+    border:1px solid var(--rivet);border-radius:9px;
+    display:grid;place-items:center;overflow:hidden;
+    box-shadow:inset 0 1px 0 rgba(255,220,150,.12);
+  }
+  .mark svg{width:30px;height:30px}
+  .brand h1{
+    font-weight:800;font-size:clamp(26px,4.4vw,40px);letter-spacing:.02em;
+    text-transform:uppercase;line-height:.92;
+    background:linear-gradient(180deg,#fff5df,#f4a91f 78%,#c17d12);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .brand .sub{display:block;font:600 11px/1.3 var(--sans);letter-spacing:.24em;
+    text-transform:uppercase;color:var(--dim);margin-top:6px}
+  .demochip{
+    align-self:center;font:700 10px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;
+    color:#0b0a07;background:var(--amber);padding:6px 10px;border-radius:999px;
+  }
+
+  /* ---------- wallet ---------- */
+  .wallet{display:flex;flex-wrap:wrap;gap:10px}
+  .gaugeread{
+    background:linear-gradient(180deg,var(--panel-2),#100d08);
+    border:1px solid var(--line);border-radius:10px;
+    padding:9px 14px;min-width:118px;
+    box-shadow:inset 0 1px 0 rgba(255,220,150,.06), inset 0 0 22px rgba(0,0,0,.5);
+  }
+  .gaugeread .lab{font:700 9.5px/1 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+  .gaugeread .val{font-family:var(--mono);font-size:20px;font-weight:600;margin-top:5px;letter-spacing:-.01em}
+  .gaugeread.usdc .val{color:var(--bone)}
+  .gaugeread.oil .val{color:var(--amber-2)}
+  .gaugeread.credit .val{color:#7fd7ff}
+  .gaugeread.net .val.up{color:var(--oxide)}
+  .gaugeread.net .val.down{color:var(--blowout)}
+
+  /* ---------- layout ---------- */
+  .console{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+  @media(max-width:860px){.console{grid-template-columns:1fr}}
+
+  .panel{
+    background:linear-gradient(180deg,var(--panel),#0e0b07);
+    border:1px solid var(--line);border-radius:16px;
+    position:relative;padding:20px;
+    box-shadow:0 24px 60px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,220,150,.05);
+  }
+  .panel::before,.panel::after{
+    content:"";position:absolute;width:7px;height:7px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#6b593a,#241c10);
+    box-shadow:0 0 0 1px rgba(0,0,0,.4);
+  }
+  .panel::before{top:11px;left:11px}
+  .panel::after{top:11px;right:11px}
+  .panelhead{display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:6px}
+  .panelhead .eyebrow{color:var(--dim)}
+  .warnstripe{height:6px;border-radius:3px;margin:2px 26px 16px;
+    background:repeating-linear-gradient(45deg,#3a2e18 0 9px,#0e0b07 9px 18px)}
+
+  /* ---------- gauge / stage ---------- */
+  .stage{position:relative;display:flex;flex-direction:column;align-items:center}
+  .dialwrap{position:relative;width:min(360px,86%);aspect-ratio:1/.62}
+  .dial{width:100%;height:100%;display:block;overflow:visible}
+  .dial .glass{fill:url(#glass)}
+  .psi{
+    position:absolute;left:0;right:0;bottom:8%;text-align:center;pointer-events:none;
+  }
+  .psi .big{font-family:var(--mono);font-size:clamp(30px,7vw,46px);font-weight:700;
+    letter-spacing:-.02em;color:var(--amber-2);text-shadow:0 0 22px var(--amber-glow);line-height:1}
+  .psi .unit{font:700 10px/1 var(--sans);letter-spacing:.28em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+
+  canvas#spray{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+
+  /* ---------- reveal card ---------- */
+  .reveal{
+    width:min(360px,92%);margin-top:6px;min-height:150px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;position:relative;
+  }
+  .idlehint{color:var(--dim);font-size:13.5px;max-width:34ch}
+  .idlehint b{color:var(--bone)}
+
+  .status{font:700 12px/1 var(--sans);letter-spacing:.24em;text-transform:uppercase;color:var(--amber);min-height:14px}
+  .card{
+    width:100%;border:1px solid var(--tiercol,var(--line));border-radius:14px;
+    padding:16px;background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(0,0,0,.25));
+    box-shadow:0 0 0 1px rgba(0,0,0,.3), 0 0 34px -6px var(--tierglow,transparent);
+    animation:slamin .5s cubic-bezier(.2,1.3,.35,1) both;
+  }
+  @keyframes slamin{from{opacity:0;transform:translateY(10px) scale(.94)}to{opacity:1;transform:none}}
+  .tiername{font-weight:800;font-size:clamp(24px,5.2vw,34px);text-transform:uppercase;letter-spacing:.02em;
+    color:var(--tiercol);line-height:1}
+  .tierblurb{color:var(--dim);font-size:13px;margin-top:5px}
+  .payline{display:flex;justify-content:center;gap:20px;margin-top:12px}
+  .payline .cell .k{font:700 9.5px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .payline .cell .v{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:4px}
+  .payline .cell .v.hold{color:var(--amber-2)}
+  .payline .cell .v.dur{color:var(--bone)}
+
+  /* ---------- buttons ---------- */
+  .btns{display:flex;gap:10px;width:min(360px,92%);margin-top:14px}
+  button{font-family:var(--sans);cursor:pointer;border:none;border-radius:12px;
+    font-weight:800;letter-spacing:.04em;text-transform:uppercase;transition:transform .08s ease,filter .15s ease,box-shadow .15s ease}
+  button:active{transform:translateY(1px) scale(.99)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--amber-2);outline-offset:3px}
+  .drill{
+    flex:1;padding:18px;font-size:17px;color:#160d02;
+    background:linear-gradient(180deg,#ffd264,var(--amber) 55%,#d4830f);
+    box-shadow:0 10px 26px -8px var(--amber-glow), inset 0 1px 0 rgba(255,255,255,.5), inset 0 -2px 0 rgba(120,60,0,.4);
+  }
+  .drill:not(:disabled):hover{filter:brightness(1.06);box-shadow:0 14px 34px -8px var(--amber-glow)}
+  .drill .cost{display:block;font:700 10px/1 var(--sans);letter-spacing:.18em;margin-top:6px;color:rgba(30,15,0,.7)}
+  .keep{flex:1;padding:14px;color:#04140e;background:linear-gradient(180deg,#7fe6c0,var(--oxide));box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+  .scrap{flex:1;padding:14px;color:var(--bone);background:var(--raise);border:1px solid var(--line)}
+  .scrap:hover{border-color:var(--rivet);background:#2b2416}
+  .scrap small{display:block;font:600 10px/1.2 var(--mono);letter-spacing:0;text-transform:none;color:var(--dim);margin-top:4px}
+  .keep small{display:block;font:600 10px/1.2 var(--mono);letter-spacing:0;text-transform:none;color:rgba(4,20,14,.7);margin-top:4px}
+  .ghostbtn{width:min(360px,92%);margin-top:10px;padding:11px;background:transparent;border:1px dashed var(--line);
+    color:var(--amber);font-size:12px}
+  .ghostbtn:hover{border-color:var(--amber);background:rgba(244,169,31,.06)}
+
+  /* ---------- pity ---------- */
+  .pity{width:min(360px,92%);margin-top:16px}
+  .pity .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .pity .lab{font:700 10px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .pity .cnt{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .pitybar{height:7px;border-radius:4px;background:#0c0a06;border:1px solid var(--line);overflow:hidden}
+  .pityfill{height:100%;width:0;background:linear-gradient(90deg,#c39a41,var(--amber));transition:width .4s ease}
+  .pity.ready .pityfill{background:linear-gradient(90deg,var(--oxide),#8ff0cf)}
+  .pity.ready .cnt{color:var(--oxide)}
+
+  /* ---------- field ---------- */
+  .fieldwrap{display:flex;flex-direction:column;min-height:100%}
+  .session{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    padding:10px 14px;margin-bottom:14px;border:1px solid var(--line);border-radius:10px;
+    background:#0e0b07;font-size:12.5px;color:var(--dim)}
+  .session .num{color:var(--bone)}
+  .session .net.up{color:var(--oxide)}
+  .session .net.down{color:var(--blowout)}
+
+  .rigs{display:flex;flex-direction:column;gap:9px;flex:1}
+  .empty{color:var(--faint);text-align:center;font-size:13px;padding:28px 10px;border:1px dashed var(--line);border-radius:12px}
+  .rig{
+    border:1px solid var(--line);border-left:3px solid var(--rigcol,var(--line));
+    border-radius:10px;padding:10px 12px;background:linear-gradient(180deg,rgba(255,255,255,.015),transparent);
+    animation:slamin .35s ease both}
+  .rig .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .rig .nm{font-weight:800;text-transform:uppercase;font-size:12.5px;letter-spacing:.04em;color:var(--rigcol)}
+  .rig .st{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .rig .barrow{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .rig .bar{flex:1;height:6px;border-radius:3px;background:#0c0a06;border:1px solid var(--line);overflow:hidden}
+  .rig .fill{height:100%;background:linear-gradient(90deg,var(--rigcol),#fff2d0);transition:width .5s linear}
+  .rig .scrapmini{padding:7px 10px;font-size:10.5px;border-radius:8px}
+  .rig.depleted{opacity:.5}
+  .rig.depleted .nm{color:var(--faint)}
+  .flash{animation:flash .5s ease}
+  @keyframes flash{0%{background:rgba(244,169,31,.16)}100%{background:transparent}}
+
+  /* ---------- spec plate ---------- */
+  .spec{margin-top:18px}
+  .odds{width:100%;border-collapse:collapse;font-size:12.5px}
+  .odds th,.odds td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line)}
+  .odds th{font:700 9.5px/1.3 var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--faint);text-align:right}
+  .odds th:first-child,.odds td:first-child{text-align:left}
+  .odds td.tier{font-weight:800;text-transform:uppercase;letter-spacing:.03em}
+  .odds .num{color:var(--bone)}
+  .odds tfoot td{color:var(--dim);font-size:11.5px;border-bottom:none;padding-top:12px}
+  .plainly{margin-top:14px;padding:14px 16px;border:1px solid var(--line);border-left:3px solid var(--blowout);
+    border-radius:10px;background:#0e0b07;font-size:12.5px;color:var(--dim)}
+  .plainly b{color:var(--bone)}
+  .foot{margin-top:22px;text-align:center;color:var(--faint);font-size:11.5px}
+
+  @keyframes shake{
+    10%,90%{transform:translate(-1px,0)}20%,80%{transform:translate(2px,-1px)}
+    30%,50%,70%{transform:translate(-3px,1px)}40%,60%{transform:translate(3px,1px)}
+  }
+  .drilling{animation:shake .5s linear infinite}
+  .bigshake{animation-duration:.28s}
+  @media(prefers-reduced-motion:reduce){
+    .drilling,.bigshake{animation:none}
+    .card{animation:none}
+  }
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:var(--panel-2);border:1px solid var(--rivet);color:var(--bone);
+    padding:11px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;
+    transition:opacity .25s ease,transform .25s ease;z-index:20;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#f4a91f" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 21h16"/><path d="M7 21 9 6l6 3-2 12"/><path d="M9 6 6 3"/><path d="m15 9 4-2"/><path d="M13 21v-4a1 1 0 0 1 2 0v4"/>
+        </svg>
+      </span>
+      <div>
+        <h1>Wildcat</h1>
+        <span class="sub">USDC in · Crude out</span>
+      </div>
+    </div>
+    <div class="wallet">
+      <div class="gaugeread usdc"><div class="lab">Stack · USDC</div><div class="val num" id="w-usdc">$0</div></div>
+      <div class="gaugeread oil"><div class="lab">Crude · USO</div><div class="val num" id="w-oil">$0</div></div>
+      <div class="gaugeread credit"><div class="lab">Credit</div><div class="val num" id="w-credit">$0</div></div>
+      <div class="gaugeread net"><div class="lab">Session net</div><div class="val num up" id="w-net">$0</div></div>
+    </div>
+    <span class="demochip">Demo · Play money</span>
+  </header>
+
+  <div class="console">
+    <!-- ============ RIG ============ -->
+    <section class="panel">
+      <div class="panelhead"><span class="eyebrow">Wellhead No. 1</span></div>
+      <div class="warnstripe"></div>
+      <div class="stage" id="stage">
+        <div class="dialwrap">
+          <canvas id="spray"></canvas>
+          <svg class="dial" id="dial" viewBox="0 0 200 130" aria-hidden="true">
+            <defs>
+              <radialGradient id="glass" cx="50%" cy="30%" r="80%">
+                <stop offset="0%" stop-color="#221c11"/><stop offset="100%" stop-color="#0b0906"/>
+              </radialGradient>
+              <filter id="soft"><feGaussianBlur stdDeviation="1.1"/></filter>
+            </defs>
+            <path class="glass" d="M8 118 A96 96 0 0 1 192 118 Z"/>
+            <g id="zones" stroke-width="11" fill="none" stroke-linecap="butt"></g>
+            <g id="ticks" stroke="#5a4c33" stroke-width="1.4"></g>
+            <g id="needle">
+              <line x1="100" y1="118" x2="100" y2="34" stroke="#ffd878" stroke-width="3.4" stroke-linecap="round" filter="url(#soft)"/>
+              <line x1="100" y1="118" x2="100" y2="40" stroke="#fff4d6" stroke-width="1.6" stroke-linecap="round"/>
+              <circle cx="100" cy="118" r="7" fill="#241c10" stroke="#6b593a" stroke-width="1.5"/>
+              <circle cx="100" cy="118" r="2.2" fill="#ffd878"/>
+            </g>
+          </svg>
+          <div class="psi"><div class="big num" id="psi">0</div><div class="unit">PSI · Pressure</div></div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="reveal" id="reveal">
+          <p class="idlehint">Hit <b>DRILL</b>. A verifiable roll picks your rig. Keep it to pump crude, or scrap it for instant credit and drill again. <b>First drill's on the house.</b></p>
+        </div>
+
+        <div class="btns" id="mainbtns">
+          <button class="drill" id="drillBtn">Drill<span class="cost" id="drillCost">First one free</span></button>
+        </div>
+        <button class="ghostbtn" id="topup" hidden>Stack's low — top up $2,000 (play money)</button>
+
+        <div class="pity" id="pityBox">
+          <div class="row"><span class="lab">Pity — guaranteed Producer+</span><span class="cnt" id="pityCnt">0 / 12</span></div>
+          <div class="pitybar"><div class="pityfill" id="pityFill"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FIELD ============ -->
+    <section class="panel fieldwrap">
+      <div class="panelhead"><span class="eyebrow">Your Field — live production</span></div>
+      <div class="warnstripe"></div>
+      <div class="session">
+        <span>Today · <span class="num" id="s-drills">0</span> drills</span>
+        <span>Net <span class="net num up" id="s-net">$0</span></span>
+      </div>
+      <div class="rigs" id="rigs">
+        <div class="empty">No rigs yet. Keep a well and it streams crude here.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ SPEC PLATE ============ -->
+  <section class="panel spec">
+    <div class="panelhead"><span class="eyebrow">Spec Plate — published odds · provably fair</span></div>
+    <div class="warnstripe"></div>
+    <div style="overflow-x:auto">
+      <table class="odds" id="oddsTable">
+        <thead><tr><th>Tier</th><th>Odds</th><th>Payout</th><th>Scrap</th><th>Feel</th></tr></thead>
+        <tbody></tbody>
+        <tfoot><tr><td colspan="5" id="edgeLine"></td></tr></tfoot>
+      </table>
+    </div>
+    <div class="plainly">
+      <b>Said plainly.</b> Payouts come from other players' deposits — there's no outside revenue. The house edge means the average player loses over time; scrap always pays less than holding is worth. Someone loses for someone to win. This demo runs on play money so you can feel the loop, edge and all.
+    </div>
+  </section>
+
+  <p class="foot">WILDCAT concept demo · economics mirror the simulator in this repo · not a real product, no real funds</p>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const fmt = n => (n<0?"-$":"$") + Math.abs(Math.round(n)).toLocaleString();
+  const fmt1 = n => (n<0?"-$":"$") + Math.abs(n).toFixed(0);
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  const reduce = window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // ---- economics (mirrors wildcat/sim/config.py default_config) ----
+  const DRILL_COST = 100, CREDIT_MULT = 1.15, PITY = 12;
+  const TIERS = [
+    {key:"dry",  name:"Dry Hole",  weight:40, mult:0.3, dur:5,  scrap:0.80, front:1.6, psi:8,  col:"#8f8168", glow:"rgba(143,129,104,.5)", feel:"Salvage. Stings, doesn't kill."},
+    {key:"marg", name:"Marginal",  weight:35, mult:0.7, dur:10, scrap:0.70, front:1.3, psi:26, col:"#c39a41", glow:"rgba(195,154,65,.5)",  feel:"Almost. Roll again."},
+    {key:"prod", name:"Producer",  weight:18, mult:1.2, dur:14, scrap:0.55, front:1.4, psi:50, col:"#54c39a", glow:"rgba(84,195,154,.55)",  feel:"You're up."},
+    {key:"gush", name:"Gusher",    weight:6,  mult:3.0, dur:20, scrap:0.45, front:1.5, psi:74, col:"#f4a91f", glow:"rgba(244,169,31,.6)",   feel:"Screenshot moment."},
+    {key:"leg",  name:"Legendary", weight:1,  mult:10,  dur:30, scrap:0.40, front:1.5, psi:95, col:"#ff4b1a", glow:"rgba(255,75,26,.7)",    feel:"What everyone's chasing."},
+  ];
+  const PROD_IDX = 2;
+  const totalW = TIERS.reduce((s,t)=>s+t.weight,0);
+  const rtp = TIERS.reduce((s,t)=>s+(t.weight/totalW)*t.mult,0); // ~0.861
+
+  function schedule(t){ // front-loaded per-tick payouts summing to lifetime value
+    const n=t.dur, life=DRILL_COST*t.mult;
+    if(t.front===1||n===1) return Array(n).fill(life/n);
+    const w=[]; for(let i=0;i<n;i++) w.push(t.front-(t.front-1)*(i/(n-1)));
+    const sw=w.reduce((a,b)=>a+b,0); return w.map(x=>life*x/sw);
+  }
+
+  // ---- state ----
+  const S = {
+    usdc:2000, oil:0, credit:0, deposited:2000,
+    firstFree:true, pity:0, wagered:0, drills:0,
+    rigs:[], busy:false, pending:null, uid:0,
+  };
+
+  // ---- roll with pity ----
+  function pick(indices){
+    let w=indices.map(i=>TIERS[i].weight), tot=w.reduce((a,b)=>a+b,0), r=Math.random()*tot, acc=0;
+    for(let k=0;k<indices.length;k++){acc+=w[k]; if(r<=acc) return indices[k];}
+    return indices[indices.length-1];
+  }
+  function roll(){
+    let idx;
+    if(S.pity>=PITY){ idx=pick(TIERS.map((_,i)=>i).filter(i=>i>=PROD_IDX)); }
+    else { idx=pick(TIERS.map((_,i)=>i)); }
+    S.pity = idx<PROD_IDX ? S.pity+1 : 0;
+    return idx;
+  }
+
+  // ================= GAUGE =================
+  const zonesG=$("#zones"), ticksG=$("#ticks"), needle=$("#needle"), psiEl=$("#psi");
+  const CX=100,CY=118,R=82;
+  const ang = p => (p-50)*1.8;                       // deg, 0=up
+  const pol = (r,a)=>{const rad=(a-90)*Math.PI/180;return[CX+r*Math.cos(rad),CY+r*Math.sin(rad)];};
+  // needle mapping uses up=0: convert
+  const polUp = (r,a)=>{const rad=a*Math.PI/180;return[CX+r*Math.sin(rad),CY-r*Math.cos(rad)];};
+  function arc(p0,p1,col){
+    const [x0,y0]=polUp(R,ang(p0)),[x1,y1]=polUp(R,ang(p1));
+    const large = Math.abs(ang(p1)-ang(p0))>180?1:0;
+    const path=document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d",`M${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`);
+    path.setAttribute("stroke",col); zonesG.appendChild(path);
+  }
+  (function buildDial(){
+    const bounds=[0,16,36,62,86,100];
+    TIERS.forEach((t,i)=>arc(bounds[i],bounds[i+1],t.col));
+    for(let p=0;p<=100;p+=10){
+      const [x0,y0]=polUp(R+7,ang(p)),[x1,y1]=polUp(R-2,ang(p));
+      const l=document.createElementNS("http://www.w3.org/2000/svg","line");
+      l.setAttribute("x1",x0.toFixed(1));l.setAttribute("y1",y0.toFixed(1));
+      l.setAttribute("x2",x1.toFixed(1));l.setAttribute("y2",y1.toFixed(1));
+      ticksG.appendChild(l);
+    }
+  })();
+  let needleP=0;
+  function setNeedle(p){ needleP=p; needle.setAttribute("transform",`rotate(${ang(p)} ${CX} ${CY})`); psiEl.textContent=Math.round(p); }
+  setNeedle(0);
+
+  // ================= PARTICLES =================
+  const cv=$("#spray"), ctx=cv.getContext("2d"); let parts=[], raf=0;
+  function sizeCanvas(){const r=cv.getBoundingClientRect();cv.width=r.width*devicePixelRatio;cv.height=r.height*devicePixelRatio;ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);}
+  window.addEventListener("resize",sizeCanvas); sizeCanvas();
+  function gush(tier){
+    if(reduce) return;
+    const r=cv.getBoundingClientRect(), wx=r.width/2, wy=r.height*0.9;
+    const count = tier.key==="dry"?10 : tier.key==="marg"?22 : tier.key==="prod"?46 : tier.key==="gush"?90 : 150;
+    const power = tier.key==="dry"?2.4 : tier.key==="marg"?3.6 : tier.key==="prod"?5 : tier.key==="gush"?7 : 9;
+    for(let i=0;i<count;i++){
+      const a=(-Math.PI/2)+(Math.random()-.5)*(tier.key==="dry"?.5:1.0);
+      const sp=power*(0.5+Math.random());
+      const gold = tier.key==="leg"&&Math.random()<.5;
+      parts.push({x:wx+(Math.random()-.5)*10,y:wy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
+        life:1,dec:0.012+Math.random()*0.02,r:1.4+Math.random()*2.6,
+        c: gold? "#ffd24d" : tier.col});
+    }
+    if(!raf) raf=requestAnimationFrame(step);
+  }
+  function step(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    parts.forEach(p=>{p.vy+=0.22;p.x+=p.vx;p.y+=p.vy;p.life-=p.dec;
+      if(p.life>0){ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.fill();}});
+    ctx.globalAlpha=1; parts=parts.filter(p=>p.life>0);
+    raf = parts.length? requestAnimationFrame(step) : 0;
+  }
+
+  // ================= RENDER =================
+  function render(){
+    $("#w-usdc").textContent=fmt(S.usdc);
+    $("#w-oil").textContent=fmt(S.oil);
+    $("#w-credit").textContent=fmt(S.credit);
+    const rigVal=S.rigs.reduce((s,r)=>s+r.remaining,0);
+    const net=(S.usdc+S.oil+S.credit+rigVal)-S.deposited;
+    const nEl=$("#w-net"), sEl=$("#s-net");
+    nEl.textContent=fmt(net); sEl.textContent=fmt(net);
+    nEl.className="val num "+(net>=0?"up":"down"); sEl.className="net num "+(net>=0?"up":"down");
+    $("#s-drills").textContent=S.drills;
+    // pity
+    $("#pityCnt").textContent=S.pity+" / "+PITY;
+    $("#pityFill").style.width=clamp(S.pity/PITY*100,0,100)+"%";
+    $("#pityBox").classList.toggle("ready",S.pity>=PITY);
+    // drill cost label + fund state
+    const canAfford=S.firstFree||S.usdc>=DRILL_COST||S.credit>=DRILL_COST;
+    $("#drillCost").textContent=S.firstFree?"First one free":("−"+fmt(DRILL_COST)+(S.usdc<DRILL_COST&&S.credit>=DRILL_COST?" credit":""));
+    $("#drillBtn").disabled=S.busy||!!S.pending||!canAfford;
+    $("#topup").hidden = canAfford;
+    renderRigs();
+  }
+  function renderRigs(){
+    const box=$("#rigs");
+    if(!S.rigs.length){box.innerHTML='<div class="empty">No rigs yet. Keep a well and it streams crude here.</div>';return;}
+    box.innerHTML="";
+    S.rigs.forEach(r=>{
+      const t=TIERS[r.ti], pct=(1-r.remaining/(DRILL_COST*t.mult))*100;
+      const el=document.createElement("div");
+      el.className="rig"+(r.depleted?" depleted":""); el.style.setProperty("--rigcol",t.col);
+      const scrapCash=r.remaining*t.scrap;
+      el.innerHTML=`<div class="top"><span class="nm">${t.name}</span>
+        <span class="st">${r.depleted?"depleted · "+fmt(r.paid):fmt(r.paid)+" / "+fmt(DRILL_COST*t.mult)}</span></div>
+        <div class="barrow"><div class="bar"><div class="fill" style="width:${clamp(pct,0,100)}%"></div></div>
+        ${r.depleted?"":`<button class="scrap scrapmini" data-scrap="${r.id}">Scrap <small>${fmt(scrapCash)} / ${fmt(scrapCash*CREDIT_MULT)} cr</small></button>`}</div>`;
+      box.appendChild(el);
+    });
+    box.querySelectorAll("[data-scrap]").forEach(b=>b.onclick=()=>scrapRig(+b.dataset.scrap));
+  }
+
+  // ================= LOOP =================
+  function payFor(cost){ // returns "free" | "usdc" | "credit"
+    if(S.firstFree){S.firstFree=false;return "free";}
+    if(S.usdc>=cost){S.usdc-=cost;return "usdc";}
+    if(S.credit>=cost){S.credit-=cost;return "credit";}
+    return null;
+  }
+  function drill(){
+    if(S.busy||S.pending) return;
+    const src=payFor(DRILL_COST);
+    if(src===null){toast("Stack's empty — top up to keep drilling");return;}
+    if(src!=="free") S.wagered+=DRILL_COST;
+    S.drills++; S.busy=true; render();
+    $("#reveal").innerHTML=""; $("#status").textContent="Drilling…";
+    $("#stage").classList.add("drilling");
+    const idx=roll(); const tier=TIERS[idx];
+    // needle sweep with tension
+    const dur=reduce?250:1500, t0=performance.now(), start=needleP;
+    const target=tier.psi + (Math.random()-.5)*8;
+    function sweep(now){
+      const k=clamp((now-t0)/dur,0,1);
+      const ease=1-Math.pow(1-k,3);
+      const jitter=(1-k)*Math.sin(now/22)*6;
+      setNeedle(clamp(start+(target-start)*ease+jitter,0,100));
+      if(k<1) requestAnimationFrame(sweep); else resolve(idx);
+    }
+    requestAnimationFrame(sweep);
+  }
+  function resolve(idx){
+    const tier=TIERS[idx];
+    $("#stage").classList.remove("drilling");
+    setNeedle(tier.psi);
+    if(!reduce && (tier.key==="gush"||tier.key==="leg")){
+      $("#stage").classList.add("drilling","bigshake");
+      setTimeout(()=>$("#stage").classList.remove("drilling","bigshake"), tier.key==="leg"?520:300);
+    }
+    gush(tier);
+    $("#status").textContent="Struck "+tier.name;
+    const life=DRILL_COST*tier.mult, cash=life*tier.scrap;
+    S.pending={idx};
+    const rv=$("#reveal");
+    rv.style.setProperty("--tiercol",tier.col); rv.style.setProperty("--tierglow",tier.glow);
+    rv.innerHTML=`<div class="card" style="--tiercol:${tier.col};--tierglow:${tier.glow}">
+        <div class="tiername">${tier.name}</div>
+        <div class="tierblurb">${tier.feel}</div>
+        <div class="payline">
+          <div class="cell"><div class="k">Hold pays</div><div class="v hold">${fmt(life)}</div></div>
+          <div class="cell"><div class="k">Over</div><div class="v dur">${tier.dur} ticks</div></div>
+          <div class="cell"><div class="k">Scrap now</div><div class="v" style="color:${tier.col}">${fmt(cash)}</div></div>
+        </div></div>`;
+    const btns=$("#mainbtns");
+    btns.innerHTML=`<button class="keep" id="keepBtn">Keep &amp; pump<small>streams ${fmt(life)} crude</small></button>
+      <button class="scrap" id="scrapBtn">Scrap → credit<small>+${fmt(cash*CREDIT_MULT)} credit · or ${fmt(cash)} cash</small></button>`;
+    $("#keepBtn").onclick=keepPending;
+    $("#scrapBtn").onclick=()=>scrapPendingCredit();
+    S.busy=false; render();
+  }
+  function clearPending(){ S.pending=null; $("#mainbtns").innerHTML=`<button class="drill" id="drillBtn">Drill<span class="cost" id="drillCost"></span></button>`; $("#drillBtn").onclick=drill; }
+  function keepPending(){
+    const {idx}=S.pending, tier=TIERS[idx];
+    S.rigs.unshift({id:++S.uid, ti:idx, sched:schedule(tier), remaining:DRILL_COST*tier.mult, paid:0, depleted:false});
+    clearPending(); $("#status").textContent=""; idleHint(); render();
+  }
+  function scrapPendingCredit(){
+    const {idx}=S.pending, tier=TIERS[idx];
+    const cash=DRILL_COST*tier.mult*tier.scrap;
+    S.credit+=cash*CREDIT_MULT;
+    clearPending(); $("#status").textContent="";
+    toast("Scrapped for "+fmt(cash*CREDIT_MULT)+" credit — drilling again");
+    render();
+    setTimeout(drill, reduce?0:180); // one-tap scrap-and-redrill
+  }
+  function scrapRig(id){
+    const r=S.rigs.find(x=>x.id===id); if(!r||r.depleted) return;
+    const t=TIERS[r.ti], cash=r.remaining*t.scrap;
+    S.credit+=cash*CREDIT_MULT; r.remaining=0; r.depleted=true; r.sched=[];
+    toast("Salvaged "+t.name+" for "+fmt(cash*CREDIT_MULT)+" credit");
+    render();
+  }
+  function idleHint(){
+    if(S.pending) return;
+    $("#reveal").innerHTML='<p class="idlehint">Rig running. <b>Drill again</b> — or scrap a well on the right for instant credit.</p>';
+  }
+
+  // production tick
+  setInterval(()=>{
+    let paid=0, changed=false;
+    S.rigs.forEach(r=>{
+      if(r.depleted||!r.sched.length) return;
+      const chunk=r.sched.shift(); r.remaining-=chunk; r.paid+=chunk; S.oil+=chunk; paid+=chunk; changed=true;
+      if(!r.sched.length){r.depleted=true; r.remaining=0;}
+    });
+    // drop long-depleted rigs after a moment to keep list tidy
+    if(S.rigs.length>7) S.rigs=S.rigs.filter((r,i)=>!r.depleted||i<7);
+    if(changed) render();
+  },1000);
+
+  // ================= chrome =================
+  function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove("show"),1900);}
+  $("#drillBtn").onclick=drill;
+  $("#topup").onclick=()=>{S.usdc+=2000;S.deposited+=2000;toast("Topped up $2,000 play money");render();};
+
+  // spec plate
+  (function(){
+    const tb=$("#oddsTable tbody"), odds={dry:"Common",marg:"Common",prod:"Uncommon",gush:"Rare",leg:"Very rare"};
+    TIERS.forEach(t=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td class="tier" style="color:${t.col}">${t.name}</td>
+        <td>${(t.weight/totalW*100).toFixed(t.weight<2?1:0)}% <span style="color:var(--faint)">${odds[t.key]}</span></td>
+        <td class="num">${t.mult.toFixed(t.mult<1?1:0)}×</td>
+        <td class="num">${Math.round(t.scrap*100)}%</td>
+        <td style="text-align:left;color:var(--dim)">${t.feel}</td>`;
+      tb.appendChild(tr);
+    });
+    $("#edgeLine").innerHTML=`Expected return if you hold everything: <span class="num" style="color:var(--bone)">${rtp.toFixed(3)}×</span> per drill — a <span class="num" style="color:var(--blowout)">${((1-rtp)*100).toFixed(1)}%</span> house edge, before the scrap discount stacks on top. Pity guarantees a Producer+ after ${PITY} cold rolls.`;
+  })();
+
+  render();
+})();
+</script>
+
+</body>
+</html>
