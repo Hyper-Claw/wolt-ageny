@@ -6,6 +6,7 @@
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test",
+    "check:arc-mainnet": "hardhat run scripts/check-env.ts --network arcMainnet",
     "deploy:arc-testnet": "hardhat run scripts/deploy.ts --network arcTestnet",
     "deploy:arc-mainnet": "hardhat run scripts/deploy.ts --network arcMainnet",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
