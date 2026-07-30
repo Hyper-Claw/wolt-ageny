@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type Address } from "viem";
 import { fetchTrades } from "@/lib/reads";
-import { fmtCompact, fmtNative, shortAddr, timeAgo } from "@/lib/format";
+import { fmtCompact, fmtUsdc, shortAddr, timeAgo } from "@/lib/format";
 
 export function TradesFeed({ token, refreshKey }: { token: Address; refreshKey: number }) {
   const { data, isLoading } = useQuery({
@@ -47,7 +47,7 @@ export function TradesFeed({ token, refreshKey }: { token: Address; refreshKey: 
                 <td className={`px-4 py-2 font-bold ${t.isBuy ? "text-arc-green" : "text-red-400"}`}>
                   {t.isBuy ? "buy" : "sell"}
                 </td>
-                <td className="px-4 py-2 text-right">{fmtNative(t.nativeAmount)}</td>
+                <td className="px-4 py-2 text-right">{fmtUsdc(t.usdcAmount)}</td>
                 <td className="px-4 py-2 text-right">{fmtCompact(t.tokenAmount)}</td>
                 <td className="px-4 py-2 text-right text-xs text-arc-muted">{timeAgo(t.timestamp)}</td>
               </tr>

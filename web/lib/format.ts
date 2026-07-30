@@ -29,6 +29,14 @@ export function fmtPrice(wei: bigint): string {
   return n.toPrecision(3); // e.g. 7.70e-8
 }
 
+/** Format a 6-decimal USDC amount (raw) as a compact human value. */
+export function fmtUsdc(raw: bigint): string {
+  const n = Number(formatUnits(raw, 6));
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: n < 1 ? 4 : 2 });
+}
+
 export function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }

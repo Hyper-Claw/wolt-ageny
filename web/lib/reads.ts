@@ -9,8 +9,17 @@ const tokenLaunchedEvent = parseAbiItem(
   "event TokenLaunched(address indexed token, address indexed creator, string name, string symbol, string logo, address pool, uint256 timestamp)"
 );
 const tradeEvent = parseAbiItem(
-  "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 nativeAmount, uint256 tokenAmount, uint256 timestamp)"
+  "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 usdcAmount, uint256 tokenAmount, uint256 timestamp)"
 );
+
+/** USDC (pair token) address + decimals, read from the launchpad. */
+export async function fetchUsdcInfo(): Promise<{ address: Address; decimals: number }> {
+  const [address, decimals] = await Promise.all([
+    publicClient.readContract({ ...launchpad, functionName: "usdc" }),
+    publicClient.readContract({ ...launchpad, functionName: "pairedDecimals" }),
+  ]);
+  return { address: address as Address, decimals: Number(decimals) };
+}
 
 const launchpad = { address: LAUNCHPAD_ADDRESS, abi: launchpadAbi } as const;
 
@@ -41,8 +50,8 @@ export type CurveState = {
 export type TradeRow = {
   trader: Address;
   isBuy: boolean;
-  nativeAmount: bigint;
-  tokenAmount: bigint;
+  usdcAmount: bigint; // 6-dec
+  tokenAmount: bigint; // 18-dec
   timestamp: number;
   txHash: string;
 };
@@ -127,19 +136,23 @@ export async function fetchCurve(token: Address): Promise<CurveState> {
   };
 }
 
-/** Estimate tokens out for a native input (spot-based; on-chain minOut guards slippage). */
-export async function calcBuy(token: Address, grossIn: bigint): Promise<bigint> {
-  if (grossIn <= 0n) return 0n;
+// spotPrice is USDC-per-token scaled 1e18; USDC is 6-dec, token 18-dec.
+// tokensOut(18) = usdcIn(6) * 1e30 / spotPrice ; usdcOut(6) = tokenIn(18) * spotPrice / 1e30
+const SCALE = 10n ** 30n;
+
+/** Estimate tokens out for a USDC input (spot-based; on-chain minOut guards slippage). */
+export async function calcBuy(token: Address, usdcIn: bigint): Promise<bigint> {
+  if (usdcIn <= 0n) return 0n;
   const price = (await publicClient.readContract({ ...launchpad, functionName: "spotPrice", args: [token] })) as bigint;
   if (price === 0n) return 0n;
-  return (grossIn * 10n ** 18n) / price;
+  return (usdcIn * SCALE) / price;
 }
 
-/** Estimate native out for a token input (spot-based). */
+/** Estimate USDC out for a token input (spot-based). */
 export async function calcSell(token: Address, tokenAmount: bigint): Promise<bigint> {
   if (tokenAmount <= 0n) return 0n;
   const price = (await publicClient.readContract({ ...launchpad, functionName: "spotPrice", args: [token] })) as bigint;
-  return (tokenAmount * price) / 10n ** 18n;
+  return (tokenAmount * price) / SCALE;
 }
 
 export async function fetchTrades(token: Address): Promise<TradeRow[]> {
@@ -155,7 +168,7 @@ export async function fetchTrades(token: Address): Promise<TradeRow[]> {
     return {
       trader: a.trader as Address,
       isBuy: Boolean(a.isBuy),
-      nativeAmount: a.nativeAmount ?? 0n,
+      usdcAmount: a.usdcAmount ?? 0n,
       tokenAmount: a.tokenAmount ?? 0n,
       timestamp: Number(a.timestamp ?? 0n),
       txHash: log.transactionHash ?? "",

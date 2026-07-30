@@ -1,20 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { parseEther, formatUnits, maxUint256, type Address } from "viem";
-import {
-  useAccount,
-  useConnect,
-  useConfig,
-  useReadContract,
-  useWriteContract,
-} from "wagmi";
+import { parseEther, parseUnits, formatUnits, maxUint256, type Address } from "viem";
+import { useAccount, useConnect, useConfig, useReadContract, useWriteContract } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { waitForTransactionReceipt } from "wagmi/actions";
 import { launchpad } from "@/lib/contracts";
 import { erc20Abi } from "@/lib/abi";
 import { calcBuy, calcSell } from "@/lib/reads";
-import { fmtCompact } from "@/lib/format";
+import { fmtCompact, fmtUsdc } from "@/lib/format";
 
 type Mode = "buy" | "sell";
 const SLIPPAGE_BPS = 300n; // 3%
@@ -39,15 +33,34 @@ export function TradePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const { data: tokenBal, refetch: refetchBal } = useReadContract({
+  // USDC (pair token) address + decimals from the launchpad.
+  const { data: usdcAddr } = useReadContract({ ...launchpad, functionName: "usdc" });
+  const { data: usdcDec } = useReadContract({ ...launchpad, functionName: "pairedDecimals" });
+  const usdc = usdcAddr as Address | undefined;
+  const usdcDecimals = Number(usdcDec ?? 6);
+
+  const { data: usdcBal, refetch: refetchUsdcBal } = useReadContract({
+    address: usdc,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address && !!usdc },
+  });
+  const { data: usdcAllowance, refetch: refetchUsdcAllow } = useReadContract({
+    address: usdc,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: address && usdc ? [address, launchpad.address] : undefined,
+    query: { enabled: !!address && !!usdc && mode === "buy" },
+  });
+  const { data: tokenBal, refetch: refetchTokenBal } = useReadContract({
     address: token,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: { enabled: !!address },
   });
-
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+  const { data: tokenAllowance, refetch: refetchTokenAllow } = useReadContract({
     address: token,
     abi: erc20Abi,
     functionName: "allowance",
@@ -55,65 +68,70 @@ export function TradePanel({
     query: { enabled: !!address && mode === "sell" },
   });
 
+  const amountIn = (): bigint | undefined => {
+    try {
+      if (!amount || Number(amount) <= 0) return undefined;
+      return mode === "buy" ? parseUnits(amount, usdcDecimals) : parseEther(amount);
+    } catch {
+      return undefined;
+    }
+  };
+
   // Live quote as the user types.
   useEffect(() => {
     let cancelled = false;
-    async function run() {
+    (async () => {
+      const inAmt = amountIn();
+      if (!inAmt) return setQuote(0n);
       try {
-        if (!amount || Number(amount) <= 0) return setQuote(0n);
-        const wei = parseEther(amount);
-        const q = mode === "buy" ? await calcBuy(token, wei) : await calcSell(token, wei);
+        const q = mode === "buy" ? await calcBuy(token, inAmt) : await calcSell(token, inAmt);
         if (!cancelled) setQuote(q);
       } catch {
         if (!cancelled) setQuote(0n);
       }
-    }
-    run();
+    })();
     return () => {
       cancelled = true;
     };
-  }, [amount, mode, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, mode, token, usdcDecimals]);
 
   const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
   const minOut = (quote * (10_000n - SLIPPAGE_BPS)) / 10_000n;
-  const needsApproval = mode === "sell" && amount && (allowance ?? 0n) < (safeParse(amount) ?? 0n);
+  const inAmt = amountIn();
+  const spender = launchpad.address;
+  const needsApproval =
+    mode === "buy"
+      ? !!inAmt && (usdcAllowance ?? 0n) < inAmt
+      : !!inAmt && (tokenAllowance ?? 0n) < inAmt;
 
   async function handle() {
     setError("");
     if (!isConnected) return connect({ connector: injected() });
-    const wei = safeParse(amount);
-    if (!wei || wei <= 0n) return;
+    if (!inAmt) return;
     try {
       setBusy(true);
       if (mode === "buy") {
-        const hash = await writeContractAsync({
-          ...launchpad,
-          functionName: "buy",
-          args: [token, minOut, deadline()],
-          value: wei,
-        });
+        if (!usdc) throw new Error("USDC not loaded");
+        if ((usdcAllowance ?? 0n) < inAmt) {
+          const ah = await writeContractAsync({ address: usdc, abi: erc20Abi, functionName: "approve", args: [spender, maxUint256] });
+          await waitForTransactionReceipt(config, { hash: ah });
+          await refetchUsdcAllow();
+        }
+        const hash = await writeContractAsync({ ...launchpad, functionName: "buy", args: [token, inAmt, minOut, deadline()] });
         await waitForTransactionReceipt(config, { hash });
       } else {
-        if (needsApproval) {
-          const ah = await writeContractAsync({
-            address: token,
-            abi: erc20Abi,
-            functionName: "approve",
-            args: [launchpad.address, maxUint256],
-          });
+        if ((tokenAllowance ?? 0n) < inAmt) {
+          const ah = await writeContractAsync({ address: token, abi: erc20Abi, functionName: "approve", args: [spender, maxUint256] });
           await waitForTransactionReceipt(config, { hash: ah });
-          await refetchAllowance();
+          await refetchTokenAllow();
         }
-        const hash = await writeContractAsync({
-          ...launchpad,
-          functionName: "sell",
-          args: [token, wei, minOut, deadline()],
-        });
+        const hash = await writeContractAsync({ ...launchpad, functionName: "sell", args: [token, inAmt, minOut, deadline()] });
         await waitForTransactionReceipt(config, { hash });
       }
       setAmount("");
       setQuote(0n);
-      await Promise.all([refetchBal(), onTraded()]);
+      await Promise.all([refetchUsdcBal(), refetchTokenBal(), onTraded()]);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message.split("\n")[0] : "Transaction failed");
     } finally {
@@ -121,22 +139,14 @@ export function TradePanel({
     }
   }
 
-  if (graduated) {
-    return (
-      <div className="card p-5">
-        <div className="text-center">
-          <div className="text-lg font-black text-arc-green">🎓 Graduated</div>
-          <p className="mt-1 text-sm text-arc-muted">
-            The bonding curve is complete and liquidity is locked, pending migration to a DEX. Curve
-            trading is closed.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="card p-5">
+      {graduated && (
+        <div className="mb-3 rounded-lg bg-arc-blue/15 px-3 py-2 text-center text-xs font-semibold text-arc-blue">
+          🎓 Graduated — trades in the open Uniswap V3 pool
+        </div>
+      )}
+
       <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg bg-arc-bg p-1">
         {(["buy", "sell"] as Mode[]).map((m) => (
           <button
@@ -147,11 +157,7 @@ export function TradePanel({
               setQuote(0n);
             }}
             className={`rounded-md py-2 text-sm font-bold capitalize transition ${
-              mode === m
-                ? m === "buy"
-                  ? "bg-arc-green text-black"
-                  : "bg-red-500 text-white"
-                : "text-arc-muted hover:text-white"
+              mode === m ? (m === "buy" ? "bg-arc-blue text-white" : "bg-red-500 text-white") : "text-arc-muted hover:text-arc-text"
             }`}
           >
             {m}
@@ -161,14 +167,15 @@ export function TradePanel({
 
       <div className="mb-2 flex items-center justify-between text-xs text-arc-muted">
         <span>{mode === "buy" ? "You pay (USDC)" : "You sell (tokens)"}</span>
-        {mode === "sell" && tokenBal != null && (
-          <button
-            className="hover:text-white"
-            onClick={() => setAmount(formatUnits(tokenBal as bigint, 18))}
-          >
+        {mode === "buy" && usdcBal != null ? (
+          <button className="hover:text-arc-text" onClick={() => setAmount(formatUnits(usdcBal as bigint, usdcDecimals))}>
+            balance: {fmtUsdc(usdcBal as bigint)}
+          </button>
+        ) : mode === "sell" && tokenBal != null ? (
+          <button className="hover:text-arc-text" onClick={() => setAmount(formatUnits(tokenBal as bigint, 18))}>
             balance: {fmtCompact(tokenBal as bigint)}
           </button>
-        )}
+        ) : null}
       </div>
       <input
         className="input mb-2 text-lg"
@@ -180,9 +187,9 @@ export function TradePanel({
 
       {mode === "buy" && (
         <div className="mb-3 flex flex-wrap gap-2">
-          {["0.1", "1", "5", "10"].map((v) => (
+          {["1", "5", "25", "100"].map((v) => (
             <button key={v} onClick={() => setAmount(v)} className="btn-ghost px-2 py-1 text-xs">
-              {v}
+              ${v}
             </button>
           ))}
         </div>
@@ -192,7 +199,7 @@ export function TradePanel({
         <div className="flex justify-between">
           <span className="text-arc-muted">You receive ≈</span>
           <span className="font-bold">
-            {quote > 0n ? fmtCompact(quote) : "0"} {mode === "buy" ? "tokens" : "USDC"}
+            {mode === "buy" ? `${quote > 0n ? fmtCompact(quote) : "0"} tokens` : `${quote > 0n ? fmtUsdc(quote) : "0"} USDC`}
           </span>
         </div>
         <div className="mt-1 flex justify-between text-xs text-arc-muted">
@@ -213,19 +220,13 @@ export function TradePanel({
           : !isConnected
             ? "Connect wallet"
             : needsApproval
-              ? "Approve & sell"
+              ? mode === "buy"
+                ? "Approve & buy"
+                : "Approve & sell"
               : mode === "buy"
                 ? "Buy"
                 : "Sell"}
       </button>
     </div>
   );
-}
-
-function safeParse(v: string): bigint | undefined {
-  try {
-    return parseEther(v || "0");
-  } catch {
-    return undefined;
-  }
 }

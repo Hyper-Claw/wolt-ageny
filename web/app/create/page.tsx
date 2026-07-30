@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { parseEther, decodeEventLog, type Address } from "viem";
+import { decodeEventLog, type Address } from "viem";
 import { useAccount, useConnect, useWriteContract, useConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
 import { waitForTransactionReceipt } from "wagmi/actions";
@@ -27,7 +27,6 @@ export default function CreatePage() {
     discord: "",
     website: "",
     farcaster: "",
-    devBuy: "",
   });
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -49,7 +48,6 @@ export default function CreatePage() {
     try {
       setBusy(true);
       setStatus("Confirm the transaction in your wallet…");
-      const value = form.devBuy ? parseEther(form.devBuy) : 0n;
       const hash = await writeContractAsync({
         ...launchpad,
         functionName: "launch",
@@ -68,7 +66,6 @@ export default function CreatePage() {
             },
           },
         ],
-        value,
       });
       setStatus("Deploying token + V3 pool on Arc…");
       const receipt = await waitForTransactionReceipt(config, { hash });
@@ -147,9 +144,10 @@ export default function CreatePage() {
             <input className="input" placeholder="https://warpcast.com/…" value={form.farcaster} onChange={set("farcaster")} />
           </Field>
         </div>
-        <Field label="Dev buy (optional)" hint="USDC of your own to buy on the curve at launch">
-          <input className="input" placeholder="0.0" inputMode="decimal" value={form.devBuy} onChange={set("devBuy")} />
-        </Field>
+        <p className="text-xs text-arc-muted">
+          Launching deploys your token and seeds its entire supply into a locked Uniswap V3 pool paired
+          with USDC. It's tradable immediately. You can buy your own tokens right after on the coin page.
+        </p>
 
         {error && <p className="rounded-lg bg-red-500/10 p-3 text-xs text-red-300">{error}</p>}
         {status && !error && <p className="text-xs text-arc-green">{status}</p>}

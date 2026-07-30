@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getAddress, isAddress, type Address } from "viem";
 import { fetchCurve, fetchTokenMeta } from "@/lib/reads";
 import { activeChain } from "@/lib/chain";
-import { fmtCompact, fmtPrice, shortAddr } from "@/lib/format";
+import { fmtCompact, fmtPrice, fmtUsdc, shortAddr } from "@/lib/format";
 import { TradePanel } from "@/components/TradePanel";
 import { TradesFeed } from "@/components/TradesFeed";
 
@@ -84,7 +84,7 @@ export default function TokenPage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Market cap" value={curve ? `${fmtCompact(curve.marketCap)}` : "…"} unit="USDC" />
             <Stat label="Price" value={curve ? fmtPrice(curve.spotPrice) : "…"} unit="USDC" />
-            <Stat label="Raised" value={curve ? fmtCompact(curve.principal) : "…"} unit="USDC" />
+            <Stat label="Raised" value={curve ? fmtUsdc(curve.principal) : "…"} unit="USDC" />
             <Stat label="Progress" value={`${progress.toFixed(1)}%`} />
           </div>
 
@@ -125,8 +125,9 @@ function CurveProgress({ progress }: { progress: number }) {
         />
       </div>
       <p className="mt-3 text-xs text-arc-muted">
-        When the curve reaches 100%, all curve tokens are sold, trading closes and the reserved
-        liquidity is locked for migration to a DEX.
+        Progress tracks USDC raised toward the graduation threshold. Liquidity is locked in the
+        Uniswap V3 pool from launch, and trading continues in the same pool before and after
+        graduation.
       </p>
     </div>
   );

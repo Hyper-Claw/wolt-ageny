@@ -43,7 +43,30 @@ export const hardhatLocal = defineChain({
 });
 
 /**
- * The chain the app talks to. Set NEXT_PUBLIC_CHAIN=local in web/.env.local to
- * target a local Hardhat node; anything else (default) targets Arc testnet.
+ * Arc mainnet. Chain id + RPC come from env because Arc mainnet params were not
+ * public at build time — set NEXT_PUBLIC_ARC_MAINNET_CHAIN_ID and NEXT_PUBLIC_ARC_RPC.
  */
-export const activeChain = process.env.NEXT_PUBLIC_CHAIN === "local" ? hardhatLocal : arcTestnet;
+export const arcMainnet = defineChain({
+  id: Number(process.env.NEXT_PUBLIC_ARC_MAINNET_CHAIN_ID ?? "5042002"),
+  name: "Arc",
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
+  rpcUrls: {
+    default: { http: [process.env.NEXT_PUBLIC_ARC_RPC ?? "https://rpc.testnet.arc.io"] },
+  },
+  blockExplorers: {
+    default: { name: "Arcscan", url: process.env.NEXT_PUBLIC_ARC_EXPLORER ?? "https://arc.exploreme.pro" },
+  },
+});
+
+/**
+ * The chain the app talks to, chosen by NEXT_PUBLIC_CHAIN:
+ *   "local"   → local Hardhat node
+ *   "mainnet" → Arc mainnet (env-configured)
+ *   anything else (default) → Arc testnet
+ */
+export const activeChain =
+  process.env.NEXT_PUBLIC_CHAIN === "local"
+    ? hardhatLocal
+    : process.env.NEXT_PUBLIC_CHAIN === "mainnet"
+      ? arcMainnet
+      : arcTestnet;

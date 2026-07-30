@@ -36,9 +36,10 @@ export const launchpadAbi = [
   {
     type: "function",
     name: "buy",
-    stateMutability: "payable",
+    stateMutability: "nonpayable",
     inputs: [
       { name: "token", type: "address" },
+      { name: "usdcIn", type: "uint256" },
       { name: "minTokensOut", type: "uint256" },
       { name: "deadline", type: "uint256" },
     ],
@@ -51,11 +52,13 @@ export const launchpadAbi = [
     inputs: [
       { name: "token", type: "address" },
       { name: "tokenAmount", type: "uint256" },
-      { name: "minNativeOut", type: "uint256" },
+      { name: "minUsdcOut", type: "uint256" },
       { name: "deadline", type: "uint256" },
     ],
-    outputs: [{ name: "nativeOut", type: "uint256" }],
+    outputs: [{ name: "usdcOut", type: "uint256" }],
   },
+  { type: "function", name: "usdc", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "address" }] },
+  { type: "function", name: "pairedDecimals", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint8" }] },
   // --- views ---
   { type: "function", name: "spotPrice", stateMutability: "view", inputs: [{ name: "token", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
   { type: "function", name: "marketCap", stateMutability: "view", inputs: [{ name: "token", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
@@ -107,7 +110,7 @@ export const launchpadAbi = [
       { name: "token", type: "address", indexed: true },
       { name: "trader", type: "address", indexed: true },
       { name: "isBuy", type: "bool", indexed: false },
-      { name: "nativeAmount", type: "uint256", indexed: false },
+      { name: "usdcAmount", type: "uint256", indexed: false },
       { name: "tokenAmount", type: "uint256", indexed: false },
       { name: "timestamp", type: "uint256", indexed: false },
     ],
