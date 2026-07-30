@@ -30,9 +30,17 @@ web/         Next.js 14 + wagmi/viem — the launchpad UI
 
 ## Try it locally (no real funds)
 
-Want to click through the whole thing in your browser? See **[LOCAL.md](./LOCAL.md)** — a local
-Hardhat chain + seeded demo coins + the app, in three commands. Or watch the lifecycle in the
-terminal with `cd contracts && npm run demo`.
+Want to click through the whole thing in your browser? See **[LOCAL.md](./LOCAL.md)**. In short,
+from the repo root:
+
+```bash
+npm run setup     # one-time: install contracts + web deps
+npm run chain     # terminal 1: local blockchain
+npm run seed      # terminal 2: deploy launchpad + 5 demo coins (auto-writes web config)
+npm run web       # terminal 3: app at http://localhost:3000
+```
+
+Or watch the lifecycle in the terminal with `npm run demo`.
 
 ## Smart contracts
 

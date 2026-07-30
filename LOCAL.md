@@ -5,91 +5,53 @@ machine. Everything uses fake local test funds; nothing touches Arc or real mone
 
 ## Prerequisites
 
-- **Node.js 18+** and npm
+- **Node.js 18+** and npm — check with `node -v` ([install here](https://nodejs.org) if missing)
 - A **browser wallet** — [MetaMask](https://metamask.io) is easiest
-- This repo cloned locally
+- The code on your machine. Either:
+  - `git clone <this-repo-url>` then `git checkout claude/arc-token-launchpad-pwo0s4`, or
+  - on GitHub, switch to the `claude/arc-token-launchpad-pwo0s4` branch → **Code ▸ Download ZIP** and unzip.
 
-## The short version
+## One-time install
 
-```bash
-# one-time
-git clone <this-repo> && cd wolt-ageny
-(cd contracts && npm install)
-(cd web && npm install)
-```
-
-Then use **three terminals**:
-
-| Terminal | Directory   | Command            | What it does                              |
-| -------- | ----------- | ------------------ | ----------------------------------------- |
-| 1        | `contracts` | `npm run node`     | Starts a local blockchain on port 8545    |
-| 2        | `contracts` | `npm run seed:local` | Deploys the launchpad + 5 demo coins    |
-| 3        | `web`       | `npm run dev`      | Starts the app at http://localhost:3000   |
-
-## Step by step
-
-### 1. Start the local chain (Terminal 1)
+From the repo root:
 
 ```bash
-cd contracts
-npm run node
+npm run setup
 ```
 
-Leave this running. It prints 20 pre-funded test accounts and their private keys. **Account #0**:
+(installs both `contracts` and `web` dependencies).
 
-```
-Address:     0xf39Fd6e51aad88F6F4ce6aB8827279cfffb92266
-Private key: 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
-```
+## Start it — three terminals, all from the repo root
 
-> These keys are public and well-known — they only control fake funds on your local node. **Never
-> send real money to them.**
+| Terminal | Command         | What it does                                                    |
+| -------- | --------------- | --------------------------------------------------------------- |
+| 1        | `npm run chain` | Starts a local blockchain on port 8545 (leave it running)       |
+| 2        | `npm run seed`  | Deploys the launchpad + 5 demo coins, **auto-writes** web config |
+| 3        | `npm run web`   | Starts the app at http://localhost:3000                         |
 
-### 2. Deploy + seed demo coins (Terminal 2)
+That's it. `npm run seed` writes `web/.env.local` for you, so there's nothing to copy or paste.
+Open **http://localhost:3000** and you'll see the 5 seeded coins.
 
-```bash
-cd contracts
-npm run seed:local
-```
+> On a fresh chain the launchpad always deploys to
+> `0x5FbDB2315678afecb367f032d93F642f64180aa3` (deterministic), and the seed writes that address into
+> `web/.env.local` automatically.
 
-This deploys `ArcLaunchpad` and launches 5 demo coins with some trades. On a fresh node the address
-is always:
+## Connect MetaMask to the local chain
 
-```
-0x5FbDB2315678afecb367f032d93F642f64180aa3
-```
-
-### 3. Point the web app at local (Terminal 3)
-
-```bash
-cd web
-cp .env.local.example .env.local
-```
-
-Edit `web/.env.local` so it contains:
-
-```
-NEXT_PUBLIC_CHAIN=local
-NEXT_PUBLIC_LAUNCHPAD_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
-```
-
-Then:
-
-```bash
-npm run dev
-```
-
-Open **http://localhost:3000** — the Explore grid should show the 5 seeded coins.
-
-### 4. Connect MetaMask to the local chain
-
-1. In MetaMask → networks → **Add network manually**:
+1. MetaMask → networks → **Add network manually**:
    - Network name: `Localhost 8545`
    - RPC URL: `http://127.0.0.1:8545`
    - Chain ID: `31337`
    - Currency symbol: `USDC`
-2. **Import account** → paste the Account #0 private key above. You'll see ~10000 test USDC.
-3. Back in the app, click **Connect wallet**.
+2. **Import account** → paste this well-known local test key (Hardhat Account #0):
+
+   ```
+   0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+   ```
+
+   You'll see ~10000 test USDC. These keys are public and only control fake local funds — **never
+   send real money to them.**
+3. In the app, click **Connect wallet**.
 
 Now you can:
 
@@ -99,14 +61,16 @@ Now you can:
 
 ## Tips & troubleshooting
 
-- **Restarting the node resets everything.** Re-run `npm run seed:local`. The launchpad address stays
-  the same, so you don't need to change `.env.local`.
-- **MetaMask "nonce too high" after a node restart:** MetaMask → Settings → Advanced → *Clear
+- **Restarting the chain (Terminal 1) wipes state.** Just re-run `npm run seed`. The address stays
+  the same, so nothing else changes.
+- **MetaMask "nonce too high" after a chain restart:** MetaMask → Settings → Advanced → *Clear
   activity tab data* for the account.
-- **Explore is empty:** confirm `.env.local` has `NEXT_PUBLIC_CHAIN=local` and the right address, then
-  restart `npm run dev` (Next.js only reads env at startup).
-- **Change your own account:** import any of the other private keys the node printed to trade from a
-  second wallet.
+- **Explore is empty:** make sure Terminal 2 (`npm run seed`) finished successfully, then restart
+  Terminal 3 (`npm run web`) — Next.js only reads env at startup.
+- **Port 8545 already in use:** an old chain is still running; stop it (close that terminal) before
+  `npm run chain`.
+- **Watch it without a browser:** `npm run demo` prints the full launch → trade → graduate lifecycle
+  in the terminal.
 
-When you're ready to go live on Arc testnet instead of local, see the deploy section in the main
-[README](./README.md).
+When you're ready to go live on Arc testnet with a shareable URL instead of local, see the deploy
+section in the main [README](./README.md).

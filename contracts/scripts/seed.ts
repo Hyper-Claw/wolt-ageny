@@ -1,4 +1,6 @@
 import { ethers, network } from "hardhat";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Deploys ArcLaunchpad to a local Hardhat node and seeds it with demo coins and
@@ -63,11 +65,29 @@ async function main() {
     console.log(`launched ${c.sym.padEnd(6)} → ${token}  (${c.buys.length} buys)`);
   }
 
+  // Convenience: write web/.env.local automatically so there's nothing to copy.
+  const envLine = `NEXT_PUBLIC_CHAIN=local\nNEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}\n`;
+  const webEnvPath = path.resolve(process.cwd(), "..", "web", ".env.local");
+  let wrote = false;
+  try {
+    if (fs.existsSync(path.dirname(webEnvPath))) {
+      fs.writeFileSync(webEnvPath, envLine);
+      wrote = true;
+    }
+  } catch {
+    /* fall back to printing below */
+  }
+
   console.log("\n────────────────────────────────────────────────────────────");
-  console.log(`ArcLaunchpad: ${address}`);
-  console.log("\nPut these in web/.env.local, then run `npm run dev` in web/:");
-  console.log(`  NEXT_PUBLIC_CHAIN=local`);
-  console.log(`  NEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}`);
+  console.log(`ArcLaunchpad deployed at: ${address}`);
+  if (wrote) {
+    console.log(`\n✔ Wrote web/.env.local for you. Now just run the web app:`);
+    console.log(`    cd ../web && npm run dev`);
+  } else {
+    console.log(`\nPut these in web/.env.local, then run \`npm run dev\` in web/:`);
+    console.log(`  NEXT_PUBLIC_CHAIN=local`);
+    console.log(`  NEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}`);
+  }
   console.log("────────────────────────────────────────────────────────────\n");
 }
 
