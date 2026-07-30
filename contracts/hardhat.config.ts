@@ -23,8 +23,12 @@ subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD, async (args: { solcVersion: string
 });
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const accounts = PRIVATE_KEY ? [PRIVATE_KEY] : [];
 // Arc public testnet defaults (see https://docs.arc.io/arc-chain).
 const ARC_TESTNET_RPC = process.env.ARC_TESTNET_RPC ?? "https://rpc.testnet.arc.io";
+// Arc mainnet — set ARC_MAINNET_RPC (your provider URL) and ARC_MAINNET_CHAIN_ID.
+const ARC_MAINNET_RPC = process.env.ARC_MAINNET_RPC ?? "";
+const ARC_MAINNET_CHAIN_ID = process.env.ARC_MAINNET_CHAIN_ID ? Number(process.env.ARC_MAINNET_CHAIN_ID) : undefined;
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -40,7 +44,14 @@ const config: HardhatUserConfig = {
     arcTestnet: {
       url: ARC_TESTNET_RPC,
       chainId: 5042002,
-      accounts: PRIVATE_KEY ? [PRIVATE_KEY] : [],
+      accounts,
+    },
+    // Chain id + RPC come from env because Arc mainnet params weren't public at
+    // build time. Set ARC_MAINNET_RPC and ARC_MAINNET_CHAIN_ID in .env.
+    arcMainnet: {
+      url: ARC_MAINNET_RPC,
+      ...(ARC_MAINNET_CHAIN_ID ? { chainId: ARC_MAINNET_CHAIN_ID } : {}),
+      accounts,
     },
   },
 };

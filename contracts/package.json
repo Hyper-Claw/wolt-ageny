@@ -6,8 +6,11 @@
   "scripts": {
     "build": "hardhat compile",
     "test": "hardhat test",
-    "deploy:arc": "hardhat run scripts/deploy.ts --network arcTestnet",
+    "deploy:arc-testnet": "hardhat run scripts/deploy.ts --network arcTestnet",
+    "deploy:arc-mainnet": "hardhat run scripts/deploy.ts --network arcMainnet",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "launch-trade:arc-mainnet": "hardhat run scripts/launch-and-trade.ts --network arcMainnet",
+    "launch-trade:arc-testnet": "hardhat run scripts/launch-and-trade.ts --network arcTestnet",
     "seed:local": "hardhat run scripts/seed.ts --network localhost",
     "demo": "hardhat run scripts/demo.ts",
     "node": "hardhat node"

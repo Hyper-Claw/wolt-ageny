@@ -1,19 +1,20 @@
 import { ethers } from "hardhat";
-import { deployV3, deployLaunchpad, v3Addrs, launchParams } from "./v3";
+import { deployV3, deployLaunchpad, v3Addrs, fundUsdc, launchParams } from "./v3";
 
 /**
- * End-to-end walkthrough on a local in-process chain (real Uniswap V3).
+ * End-to-end walkthrough on a local in-process chain (real Uniswap V3, USDC-paired).
  * Run:  npm run demo
  */
-const F = (n: bigint) => Number(ethers.formatEther(n));
+const U = (n: bigint) => Number(ethers.formatUnits(n, 6));
+const P = (n: bigint) => Number(ethers.formatUnits(n, 18));
 
 async function main() {
   const [deployer, alice, bob] = await ethers.getSigners();
   const v3 = await deployV3(deployer);
   const lp = await deployLaunchpad(await v3Addrs(v3), deployer.address, {
-    graduationThreshold: ethers.parseEther("3"),
+    graduationThreshold: 500n * 1_000_000n, // $500 for a quick demo
   });
-  console.log(`\nArcLaunchpad (V3) → ${await lp.getAddress()}\n`);
+  console.log(`\nArcLaunchpad (V3, USDC) → ${await lp.getAddress()}\n`);
 
   const tx = await lp.connect(alice).launch(launchParams());
   const rc = await tx.wait();
@@ -30,10 +31,12 @@ async function main() {
   await snapshot(lp, token);
 
   const dl = () => Math.floor(Date.now() / 1000) + 600;
+  await fundUsdc(v3.usdc, alice, "100000", await lp.getAddress());
+  await fundUsdc(v3.usdc, bob, "100000", await lp.getAddress());
 
-  console.log(`\n2. Alice buys 0.5, Bob buys 1.0 (native) through the V3 router`);
-  await lp.connect(alice).buy(token, 0n, dl(), { value: ethers.parseEther("0.5") });
-  await lp.connect(bob).buy(token, 0n, dl(), { value: ethers.parseEther("1") });
+  console.log(`\n2. Alice buys $50, Bob buys $150 of USDC`);
+  await lp.connect(alice).buy(token, ethers.parseUnits("50", 6), 0n, dl());
+  await lp.connect(bob).buy(token, ethers.parseUnits("150", 6), 0n, dl());
   await snapshot(lp, token);
 
   const erc20 = await ethers.getContractAt("LaunchToken", token);
@@ -43,11 +46,11 @@ async function main() {
   await lp.connect(alice).sell(token, bal / 2n, 0n, dl());
   await snapshot(lp, token);
 
-  console.log(`\n4. A whale buys 4.0 and graduates the token`);
-  await lp.connect(bob).buy(token, 0n, dl(), { value: ethers.parseEther("4") });
+  console.log(`\n4. A whale buys $500 and graduates the token`);
+  await lp.connect(bob).buy(token, ethers.parseUnits("500", 6), 0n, dl());
   await snapshot(lp, token);
 
-  console.log(`\nDone ✔  launch → trade → graduate on real Uniswap V3.\n`);
+  console.log(`\nDone ✔  launch → USDC trade → graduate on real Uniswap V3.\n`);
 }
 
 async function snapshot(lp: any, token: string) {
@@ -56,8 +59,8 @@ async function snapshot(lp: any, token: string) {
   const st = await lp.graduationStatus(token);
   const progress = await lp.progressBps(token);
   console.log(
-    `   price=${F(price).toPrecision(3)}  mcap=${F(mcap).toFixed(2)}  ` +
-      `principal=${F(st.principal).toFixed(3)}/${F(st.threshold)}  ` +
+    `   price=$${P(price).toPrecision(3)}  mcap=$${P(mcap).toFixed(0)}  ` +
+      `raised=$${U(st.principal).toFixed(2)}/$${U(st.threshold)}  ` +
       `progress=${(Number(progress) / 100).toFixed(1)}%  graduated=${st.graduated}`
   );
 }

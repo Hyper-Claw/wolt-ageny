@@ -1,11 +1,11 @@
 import { ethers, network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
-import { deployV3, deployLaunchpad, v3Addrs } from "./v3";
+import { deployV3, deployLaunchpad, v3Addrs, fundUsdc } from "./v3";
 
 /**
- * Local-only: deploy a full Uniswap V3 stack + ArcLaunchpad, seed demo coins with
- * trades (and graduate one), and auto-write web/.env.local. Run against a node:
+ * Local-only: deploy a full Uniswap V3 stack + mock USDC + ArcLaunchpad, seed
+ * demo coins with USDC trades (and graduate one), and auto-write web/.env.local.
  *   npm run seed:local
  */
 async function main() {
@@ -16,22 +16,25 @@ async function main() {
 
   const v3 = await deployV3(deployer);
   const lp = await deployLaunchpad(await v3Addrs(v3), deployer.address, {
-    graduationThreshold: ethers.parseEther("3"),
+    graduationThreshold: 500n * 1_000_000n, // $500 so a demo coin can graduate
   });
   const address = await lp.getAddress();
   const deadline = () => Math.floor(Date.now() / 1000) + 600;
 
+  // Fund traders with mock USDC.
+  const traders = [alice, bob, carol];
+  for (const t of traders) await fundUsdc(v3.usdc, t, "100000", address);
+
   const socials = (t: string, w: string) => ({ twitter: t, telegram: "", discord: "", website: w, farcaster: "" });
   const coins = [
-    { s: alice, name: "Arc Doge", symbol: "ADOGE", desc: "The first dog on Arc.", buys: ["0.3", "0.2"] },
-    { s: bob, name: "Circle Cat", symbol: "MEOW", desc: "Nine lives, sub-second finality.", buys: ["0.8", "1.2"] },
-    { s: carol, name: "USDC Pepe", symbol: "UPEPE", desc: "Rare. Stable. Frog.", buys: ["0.1"] },
+    { s: alice, name: "Arc Doge", symbol: "ADOGE", desc: "The first dog on Arc.", buys: ["30", "20"] },
+    { s: bob, name: "Circle Cat", symbol: "MEOW", desc: "Nine lives, sub-second finality.", buys: ["80", "120"] },
+    { s: carol, name: "USDC Pepe", symbol: "UPEPE", desc: "Rare. Stable. Frog.", buys: ["10"] },
     { s: alice, name: "Malachite", symbol: "MALA", desc: "Consensus, but make it a coin.", buys: [] },
-    { s: bob, name: "Gas Money", symbol: "GAS", desc: "Pays for itself.", buys: ["2"] },
+    { s: bob, name: "Gas Money", symbol: "GAS", desc: "Pays for itself.", buys: ["200"] },
   ];
 
   const launched: string[] = [];
-  const traders = [alice, bob, carol];
   for (const c of coins) {
     const tx = await lp
       .connect(c.s)
@@ -48,13 +51,13 @@ async function main() {
     }
     launched.push(token);
     for (let i = 0; i < c.buys.length; i++) {
-      await lp.connect(traders[i % traders.length]).buy(token, 0n, deadline(), { value: ethers.parseEther(c.buys[i]) });
+      await lp.connect(traders[i % traders.length]).buy(token, ethers.parseUnits(c.buys[i], 6), 0n, deadline());
     }
     console.log(`launched ${c.symbol.padEnd(6)} → ${token}  (${c.buys.length} buys)`);
   }
 
   // Graduate the first coin so the Graduated section is populated.
-  await lp.connect(bob).buy(launched[0], 0n, deadline(), { value: ethers.parseEther("4") });
+  await lp.connect(bob).buy(launched[0], ethers.parseUnits("600", 6), 0n, deadline());
   console.log(`graduated ${coins[0].symbol} (${launched[0]})`);
 
   const envLine = `NEXT_PUBLIC_CHAIN=local\nNEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}\n`;

@@ -3,53 +3,72 @@ import FactoryArt from "@uniswap/v3-core/artifacts/contracts/UniswapV3Factory.so
 import NpmArt from "@uniswap/v3-periphery/artifacts/contracts/NonfungiblePositionManager.sol/NonfungiblePositionManager.json";
 import RouterArt from "@uniswap/v3-periphery/artifacts/contracts/SwapRouter.sol/SwapRouter.json";
 
-/** Deploy a full local Uniswap V3 stack (for local dev / tests). */
-export async function deployV3(deployer: any) {
+/**
+ * Deploy a full local Uniswap V3 stack + a mock 6-decimal USDC (for local dev /
+ * tests). On Arc we instead point at the real USDC ERC-20 and either an existing
+ * V3 or one we deploy — see deploy.ts.
+ *
+ * WNative is deployed only as the periphery's required WETH9 constructor arg; it
+ * is never the pair token (tokens pair against USDC directly).
+ */
+/** Deploy just the Uniswap V3 core+periphery (WETH9 placeholder, factory, NPM, router). */
+export async function deployV3Core(deployer: any) {
   const WNative = await ethers.getContractFactory("WNative");
-  const wnative = await WNative.deploy();
-  await wnative.waitForDeployment();
+  const weth9 = await WNative.deploy();
+  await weth9.waitForDeployment();
 
   const Factory = new ethers.ContractFactory(FactoryArt.abi, FactoryArt.bytecode, deployer);
   const factory = await Factory.deploy();
   await factory.waitForDeployment();
 
   const Npm = new ethers.ContractFactory(NpmArt.abi, NpmArt.bytecode, deployer);
-  const npm = await Npm.deploy(await factory.getAddress(), await wnative.getAddress(), await wnative.getAddress());
+  const npm = await Npm.deploy(await factory.getAddress(), await weth9.getAddress(), await weth9.getAddress());
   await npm.waitForDeployment();
 
   const Router = new ethers.ContractFactory(RouterArt.abi, RouterArt.bytecode, deployer);
-  const router = await Router.deploy(await factory.getAddress(), await wnative.getAddress());
+  const router = await Router.deploy(await factory.getAddress(), await weth9.getAddress());
   await router.waitForDeployment();
 
-  return { wnative, factory, npm, router };
+  return { weth9, factory, npm, router };
 }
 
-/**
- * Default curve economics. Single-sided range ~1e-9 .. 1e-7 native/token gives
- * a full-curve capacity of ~10 native; the graduation threshold sits below that.
- */
-export const ECON = {
-  poolFee: 10000,
-  tickSpacing: 200,
-  tickLower: -207200,
-  tickUpper: -161000,
-  totalSupply: ethers.parseEther("1000000000"),
-  graduationThreshold: ethers.parseEther("6"),
-  protocolFeePercent: 50n,
-  restrictionBlocks: 0n,
-};
+/** Local dev/test stack: V3 core + a mock 6-decimal USDC. */
+export async function deployV3(deployer: any) {
+  const core = await deployV3Core(deployer);
+  const USDC = await ethers.getContractFactory("MockUSDC");
+  const usdc = await USDC.deploy();
+  await usdc.waitForDeployment();
+  return { ...core, usdc };
+}
 
-export async function v3Addrs(v3: { wnative: any; factory: any; npm: any; router: any }) {
+export async function v3Addrs(v3: { usdc: any; factory: any; npm: any; router: any }) {
   return {
     npm: await v3.npm.getAddress(),
     router: await v3.router.getAddress(),
     factory: await v3.factory.getAddress(),
-    wnative: await v3.wnative.getAddress(),
+    usdc: await v3.usdc.getAddress(),
+    pairedDecimals: 6,
   };
 }
 
+/**
+ * Default curve economics. Tokens are 18-dec, USDC is 6-dec. The single-sided
+ * range spans ~1e-6 .. 1e-4 USDC/token; graduation threshold is in USDC (6-dec).
+ * Tune before a live deploy to hit a target raise (DYOR V3 uses ~$9k).
+ */
+export const ECON = {
+  poolFee: 10000,
+  tickSpacing: 200,
+  tickLower: -414400,
+  tickUpper: -368400,
+  totalSupply: ethers.parseEther("1000000000"),
+  graduationThreshold: 9000n * 1_000_000n, // 9,000 USDC (6-dec)
+  protocolFeePercent: 50n,
+  restrictionBlocks: 0n,
+};
+
 export async function deployLaunchpad(
-  a: { npm: string; router: string; factory: string; wnative: string },
+  a: { npm: string; router: string; factory: string; usdc: string; pairedDecimals: number },
   feeRecipient: string,
   overrides: Partial<typeof ECON> = {}
 ) {
@@ -59,7 +78,8 @@ export async function deployLaunchpad(
     a.npm,
     a.router,
     a.factory,
-    a.wnative,
+    a.usdc,
+    a.pairedDecimals,
     feeRecipient,
     e.poolFee,
     e.tickSpacing,
@@ -72,6 +92,14 @@ export async function deployLaunchpad(
   );
   await lp.waitForDeployment();
   return lp;
+}
+
+/** Mint mock USDC (6-dec) to an account and approve a spender. */
+export async function fundUsdc(usdc: any, to: any, human: string, spender?: string) {
+  const amount = ethers.parseUnits(human, 6);
+  await usdc.mint(to.address, amount);
+  if (spender) await usdc.connect(to).approve(spender, amount);
+  return amount;
 }
 
 export function launchParams(over: Partial<{ name: string; symbol: string; logo: string; description: string }> = {}) {
