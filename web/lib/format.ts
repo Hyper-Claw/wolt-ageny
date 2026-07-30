@@ -21,6 +21,14 @@ export function fmtTokens(wei: bigint): string {
   return fmtCompact(wei);
 }
 
+/** Price formatting that keeps precision for very small numbers. */
+export function fmtPrice(wei: bigint): string {
+  const n = Number(formatUnits(wei, 18));
+  if (n === 0) return "0";
+  if (n >= 0.01) return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  return n.toPrecision(3); // e.g. 7.70e-8
+}
+
 export function shortAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }

@@ -1,52 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
-import { type TokenMeta, fetchCurve } from "@/lib/reads";
+import { type TokenWithCurve } from "@/lib/reads";
 import { fmtCompact, shortAddr, timeAgo } from "@/lib/format";
 
-export function TokenCard({ meta }: { meta: TokenMeta }) {
-  const { data: curve } = useQuery({
-    queryKey: ["curve", meta.token],
-    queryFn: () => fetchCurve(meta.token),
-    refetchInterval: 10_000,
-  });
-
+export function TokenCard({ item }: { item: TokenWithCurve }) {
+  const { meta, curve } = item;
+  const graduated = curve?.graduated ?? false;
   const progress = curve ? Number(curve.progressBps) / 100 : 0;
 
   return (
     <Link
       href={`/token/${meta.token}`}
-      className="card group flex gap-3 p-3 transition hover:border-arc-green/60"
+      className="card group overflow-hidden p-2 transition hover:border-arc-blue/60"
     >
-      <Thumb uri={meta.uri} symbol={meta.symbol} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div className="truncate font-bold">
-            {meta.name} <span className="text-arc-muted">${meta.symbol}</span>
-          </div>
-          {curve?.graduated && (
-            <span className="rounded bg-arc-green/20 px-1.5 py-0.5 text-[10px] font-bold text-arc-green">
-              GRADUATED
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 text-xs text-arc-muted">
-          by {shortAddr(meta.creator)} · {timeAgo(meta.createdAt)}
-        </div>
-        <p className="mt-1 line-clamp-2 text-xs text-arc-muted/80">{meta.description}</p>
+      <div className="relative">
+        <Thumb uri={meta.uri} symbol={meta.symbol} />
+        {graduated && (
+          <span className="absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-0.5 text-[11px] font-semibold text-arc-blue backdrop-blur">
+            Graduated
+          </span>
+        )}
+      </div>
 
-        <div className="mt-2">
-          <div className="flex justify-between text-[11px] text-arc-muted">
-            <span>mcap {curve ? `${fmtCompact(curve.marketCap)} USDC` : "…"}</span>
-            <span>{progress.toFixed(1)}%</span>
+      <div className="px-1.5 pb-1 pt-2.5">
+        <div className="truncate text-sm font-bold text-arc-text">{meta.name}</div>
+        <div className="truncate text-xs text-arc-muted">${meta.symbol}</div>
+
+        <div className="mt-1.5 text-sm font-bold text-arc-text">
+          ${fmtCompact(curve?.marketCap ?? 0n)} <span className="text-[10px] font-medium text-arc-muted">MC</span>
+        </div>
+
+        {!graduated && (
+          <div className="mt-2">
+            <div className="h-1 overflow-hidden rounded-full bg-arc-subtle">
+              <div
+                className="h-full rounded-full bg-arc-gradient transition-all"
+                style={{ width: `${Math.min(100, Math.max(2, progress))}%` }}
+              />
+            </div>
           </div>
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-arc-bg">
-            <div
-              className="h-full rounded-full bg-arc-green transition-all"
-              style={{ width: `${Math.min(100, progress)}%` }}
-            />
-          </div>
+        )}
+
+        <div className="mt-2 flex items-center justify-between text-[11px] text-arc-muted">
+          <span className="font-mono">{shortAddr(meta.token)}</span>
+          {graduated ? <span>{timeAgo(meta.createdAt)}</span> : <span className="text-arc-blue">{progress.toFixed(0)}%</span>}
         </div>
       </div>
     </Link>
@@ -56,12 +54,12 @@ export function TokenCard({ meta }: { meta: TokenMeta }) {
 function Thumb({ uri, symbol }: { uri: string; symbol: string }) {
   const valid = uri && (uri.startsWith("http") || uri.startsWith("data:"));
   return (
-    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-arc-bg">
+    <div className="aspect-square w-full overflow-hidden rounded-xl bg-arc-subtle">
       {valid ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={uri} alt={symbol} className="h-full w-full object-cover" />
       ) : (
-        <div className="grid h-full w-full place-items-center text-2xl font-black text-arc-muted">
+        <div className="grid h-full w-full place-items-center text-4xl font-black text-arc-muted">
           {symbol.slice(0, 2).toUpperCase()}
         </div>
       )}

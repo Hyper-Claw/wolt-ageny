@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getAddress, isAddress, type Address } from "viem";
 import { fetchCurve, fetchTokenMeta } from "@/lib/reads";
 import { activeChain } from "@/lib/chain";
-import { fmtCompact, shortAddr } from "@/lib/format";
+import { fmtCompact, fmtPrice, shortAddr } from "@/lib/format";
 import { TradePanel } from "@/components/TradePanel";
 import { TradesFeed } from "@/components/TradesFeed";
 
@@ -81,7 +81,7 @@ export default function TokenPage() {
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Market cap" value={curve ? `${fmtCompact(curve.marketCap)}` : "…"} unit="USDC" />
-            <Stat label="Price" value={curve ? fmtCompact(curve.spotPrice) : "…"} unit="USDC" />
+            <Stat label="Price" value={curve ? fmtPrice(curve.spotPrice) : "…"} unit="USDC" />
             <Stat label="Raised" value={curve ? fmtCompact(curve.realNativeReserve) : "…"} unit="USDC" />
             <Stat label="Progress" value={`${progress.toFixed(1)}%`} />
           </div>
@@ -118,7 +118,7 @@ function CurveProgress({ progress }: { progress: number }) {
       </div>
       <div className="h-3 overflow-hidden rounded-full bg-arc-bg">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-arc-greenDark to-arc-green transition-all"
+          className="h-full rounded-full bg-arc-gradient transition-all"
           style={{ width: `${Math.min(100, progress)}%` }}
         />
       </div>

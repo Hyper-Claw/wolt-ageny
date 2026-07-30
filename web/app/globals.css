@@ -2,18 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+  --arc-bg: 6 6 9;
+  --arc-panel: 11 11 17;
+  --arc-card: 16 16 23;
+  --arc-subtle: 23 23 31;
+  --arc-border: 35 35 46;
+  --arc-muted: 131 131 143;
+  --arc-text: 242 242 246;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --arc-bg: 245 246 249;
+  --arc-panel: 255 255 255;
+  --arc-card: 255 255 255;
+  --arc-subtle: 238 240 244;
+  --arc-border: 227 229 234;
+  --arc-muted: 106 109 120;
+  --arc-text: 10 10 15;
 }
 
 html,
 body {
-  background-color: #0a0b0d;
-  color: #e8ecf2;
+  background-color: rgb(var(--arc-bg));
+  color: rgb(var(--arc-text));
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 ::-webkit-scrollbar {
@@ -21,7 +40,7 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #242830;
+  background: rgb(var(--arc-border));
   border-radius: 8px;
 }
 ::-webkit-scrollbar-track {
@@ -30,18 +49,32 @@ body {
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed;
   }
+  /* Primary CTA — the electric blue→violet gradient from the logo. */
   .btn-green {
-    @apply btn bg-arc-green text-black hover:bg-arc-greenDark;
+    @apply btn text-white bg-arc-gradient hover:opacity-90;
   }
   .btn-ghost {
-    @apply btn border border-arc-border bg-arc-card text-arc-muted hover:text-white hover:border-arc-muted;
+    @apply btn border border-arc-border bg-arc-card text-arc-muted hover:text-arc-text hover:border-arc-muted;
   }
   .input {
-    @apply w-full rounded-lg border border-arc-border bg-arc-bg px-3 py-2 text-white placeholder:text-arc-muted/60 outline-none focus:border-arc-green;
+    @apply w-full rounded-xl border border-arc-border bg-arc-card px-3 py-2 text-arc-text placeholder:text-arc-muted/60 outline-none focus:border-arc-blue;
   }
   .card {
-    @apply rounded-xl border border-arc-border bg-arc-card;
+    @apply rounded-2xl border border-arc-border bg-arc-card;
+  }
+  /* Pill tab groups (header nav, sort filters). */
+  .tabs {
+    @apply inline-flex items-center gap-1 rounded-full border border-arc-border bg-arc-panel p-1;
+  }
+  .tab {
+    @apply cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium text-arc-muted transition hover:text-arc-text;
+  }
+  .tab-active {
+    @apply bg-arc-subtle text-arc-text;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full bg-arc-subtle px-2 py-0.5 text-xs font-semibold text-arc-muted;
   }
 }

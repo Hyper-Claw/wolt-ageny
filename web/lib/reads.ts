@@ -80,6 +80,15 @@ export async function fetchTokenMeta(token: Address): Promise<TokenMeta | null> 
   return list.find((t) => t.token.toLowerCase() === token.toLowerCase()) ?? null;
 }
 
+export type TokenWithCurve = { meta: TokenMeta; curve: CurveState | null };
+
+/** Fetch every token together with its live curve state (for the Explore grid). */
+export async function fetchTokensWithCurves(): Promise<TokenWithCurve[]> {
+  const metas = await fetchTokenList();
+  const curves = await Promise.all(metas.map((m) => fetchCurve(m.token).catch(() => null)));
+  return metas.map((meta, i) => ({ meta, curve: curves[i] }));
+}
+
 /** Read live curve state for a token. */
 export async function fetchCurve(token: Address): Promise<CurveState> {
   const [curve, spotPrice, marketCap, progressBps] = await Promise.all([

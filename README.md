@@ -87,6 +87,9 @@ npm run dev                         # http://localhost:3000
 - Reads live chain state via viem (`TokenLaunched` / `Trade` logs + curve view functions); no indexer
   required for the MVP.
 - Until `NEXT_PUBLIC_LAUNCHPAD_ADDRESS` is set, the UI shows a banner explaining how to wire it up.
+- Dark/light theme toggle; the design follows Pons's layout in the ARC blue→violet vibe.
+- **Logo:** drop your artwork at `web/public/logo.png` and it's used automatically; otherwise the
+  bundled `web/public/logo.svg` (a gradient rope-"L") is shown.
 
 ## Notes & disclaimers
 

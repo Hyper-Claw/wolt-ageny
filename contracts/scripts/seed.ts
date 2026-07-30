@@ -42,6 +42,7 @@ async function main() {
     { s: bob, name: "Gas Money", sym: "GAS", uri: "", desc: "Pays for itself.", buys: ["20"] },
   ];
 
+  const launched: string[] = [];
   for (const c of coins) {
     const tx = await lp
       .connect(c.s)
@@ -56,6 +57,7 @@ async function main() {
         /* skip */
       }
     }
+    launched.push(token);
     const traders = [alice, bob, carol];
     for (let i = 0; i < c.buys.length; i++) {
       await lp.connect(traders[i % traders.length]).buy(token, 0n, deadline(), {
@@ -64,6 +66,10 @@ async function main() {
     }
     console.log(`launched ${c.sym.padEnd(6)} → ${token}  (${c.buys.length} buys)`);
   }
+
+  // Graduate the first coin so the Graduated section is populated in demos.
+  await lp.connect(bob).buy(launched[0], 0n, deadline(), { value: ethers.parseEther("500") });
+  console.log(`graduated ${coins[0].sym} (${launched[0]})`);
 
   // Convenience: write web/.env.local automatically so there's nothing to copy.
   const envLine = `NEXT_PUBLIC_CHAIN=local\nNEXT_PUBLIC_LAUNCHPAD_ADDRESS=${address}\n`;
