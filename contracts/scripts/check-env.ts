@@ -45,7 +45,7 @@ async function main() {
     console.log(`✗ Could not read USDC at ${usdcAddr} — wrong address, or not an ERC-20 on this chain.`);
   }
 
-  console.log("\nIf everything above looks right, run: npm run deploy:arc-mainnet");
+  console.log(`\nIf everything above looks right, run: npm run deploy:${network.name === "arcMainnet" ? "arc-mainnet" : "arc-testnet"}`);
 }
 
 main().catch((e) => {

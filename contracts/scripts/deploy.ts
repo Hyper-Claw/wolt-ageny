@@ -31,7 +31,7 @@ async function main() {
     usdc = await m.getAddress();
     console.log(`Deployed mock USDC → ${usdc}`);
   }
-  const pairedDecimals = Number(env.PAIRED_DECIMALS ?? "6");
+  const pairedDecimals = Number(env.PAIRED_DECIMALS || "6");
 
   // Uniswap V3
   let npm = env.POSITION_MANAGER, router = env.SWAP_ROUTER, factory = env.V3_FACTORY;
@@ -46,7 +46,7 @@ async function main() {
     console.log("Using existing Uniswap V3:", { factory, npm, router });
   }
 
-  const feeRecipient = env.FEE_RECIPIENT ?? deployer.address;
+  const feeRecipient = env.FEE_RECIPIENT || deployer.address;
   const lp = await deployLaunchpad({ npm: npm!, router: router!, factory: factory!, usdc, pairedDecimals }, feeRecipient);
   const lpAddr = await lp.getAddress();
 
