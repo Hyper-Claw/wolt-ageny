@@ -1,0 +1,31 @@
+# fly.io app config for the Arc RPC bridge.
+# `fly launch` will offer to generate this — you can keep the values below.
+app = "arc-rpc-bridge"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  TOR_SOCKS = "socks5h://127.0.0.1:9050"
+  # ONION_RPC is a secret — set it with:  fly secrets set ONION_RPC=http://xxxx.onion
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep one machine always on so Tor stays bootstrapped and the RPC is instant.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "60s"
+    method = "GET"
+    path = "/"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

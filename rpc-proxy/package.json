@@ -1,0 +1,13 @@
+{
+  "name": "arc-rpc-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tor -> https JSON-RPC bridge for the Arc mainnet .onion RPC",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "socks-proxy-agent": "^8.0.4"
+  }
+}
