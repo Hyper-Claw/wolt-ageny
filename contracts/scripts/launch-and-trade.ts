@@ -31,29 +31,35 @@ async function main() {
   console.log(`network=${network.name} signer=${signer.address}`);
   console.log(`USDC balance: ${ethers.formatUnits(bal0, pairedDecimals)}\n`);
 
-  // --- 1. Launch ---
-  console.log("1) launching token…");
-  const params = {
-    name: process.env.NAME ?? "Arc Test Coin",
-    symbol: process.env.SYMBOL ?? "ARCTEST",
-    logo: process.env.LOGO ?? "",
-    description: process.env.DESCRIPTION ?? "live launch + trade smoke test",
-    socials: { twitter: "", telegram: "", discord: "", website: "", farcaster: "" },
-  };
-  const ltx = await lp.launch(params);
-  const lrc = await ltx.wait();
-  let token = "";
-  for (const log of lrc!.logs) {
-    try {
-      const p = lp.interface.parseLog(log);
-      if (p?.name === "TokenLaunched") token = p.args.token;
-    } catch {
-      /* skip */
+  // --- 1. Launch (or reuse an existing token via TOKEN env) ---
+  let token = process.env.TOKEN ?? "";
+  if (token) {
+    console.log(`1) using existing token ${token} (skipping launch)`);
+    const existingPool = await lp.poolOf(token);
+    if (existingPool === ethers.ZeroAddress) throw new Error("TOKEN has no pool on this launchpad");
+  } else {
+    console.log("1) launching token…");
+    const params = {
+      name: process.env.NAME ?? "Arc Test Coin",
+      symbol: process.env.SYMBOL ?? "ARCTEST",
+      logo: process.env.LOGO ?? "",
+      description: process.env.DESCRIPTION ?? "live launch + trade smoke test",
+      socials: { twitter: "", telegram: "", discord: "", website: "", farcaster: "" },
+    };
+    const ltx = await lp.launch(params);
+    const lrc = await ltx.wait();
+    for (const log of lrc!.logs) {
+      try {
+        const p = lp.interface.parseLog(log);
+        if (p?.name === "TokenLaunched") token = p.args.token;
+      } catch {
+        /* skip */
+      }
     }
+    console.log(`   launch tx=${ltx.hash}`);
   }
   const pool = await lp.poolOf(token);
   console.log(`   token=${token}\n   pool=${pool}`);
-  console.log(`   tx=${ltx.hash}`);
   console.log(`   price=$${Number(ethers.formatUnits(await lp.spotPrice(token), 18)).toPrecision(3)} mcap=$${Number(ethers.formatUnits(await lp.marketCap(token), 18)).toFixed(0)}\n`);
 
   // --- 2. Buy ---
