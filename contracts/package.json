@@ -7,6 +7,7 @@
     "build": "hardhat compile",
     "test": "hardhat test",
     "check:arc-mainnet": "hardhat run scripts/check-env.ts --network arcMainnet",
+    "token-info:arc-mainnet": "hardhat run scripts/token-info.ts --network arcMainnet",
     "check:arc-testnet": "hardhat run scripts/check-env.ts --network arcTestnet",
     "deploy:arc-testnet": "hardhat run scripts/deploy.ts --network arcTestnet",
     "deploy:arc-mainnet": "hardhat run scripts/deploy.ts --network arcMainnet",
