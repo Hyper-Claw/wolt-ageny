@@ -32,6 +32,13 @@ async function main() {
   console.log(`USDC balance: ${ethers.formatUnits(bal0, pairedDecimals)}\n`);
 
   // --- 1. Launch (or reuse an existing token via TOKEN env) ---
+  const params = {
+    name: process.env.NAME ?? "Arc Test Coin",
+    symbol: process.env.SYMBOL ?? "ARCTEST",
+    logo: process.env.LOGO ?? "",
+    description: process.env.DESCRIPTION ?? "live launch + trade smoke test",
+    socials: { twitter: "", telegram: "", discord: "", website: "", farcaster: "" },
+  };
   let token = process.env.TOKEN ?? "";
   if (token) {
     console.log(`1) using existing token ${token} (skipping launch)`);
@@ -39,13 +46,6 @@ async function main() {
     if (existingPool === ethers.ZeroAddress) throw new Error("TOKEN has no pool on this launchpad");
   } else {
     console.log("1) launching token…");
-    const params = {
-      name: process.env.NAME ?? "Arc Test Coin",
-      symbol: process.env.SYMBOL ?? "ARCTEST",
-      logo: process.env.LOGO ?? "",
-      description: process.env.DESCRIPTION ?? "live launch + trade smoke test",
-      socials: { twitter: "", telegram: "", discord: "", website: "", farcaster: "" },
-    };
     const ltx = await lp.launch(params);
     const lrc = await ltx.wait();
     for (const log of lrc!.logs) {
@@ -75,7 +75,11 @@ async function main() {
   console.log(`   tx=${btx.hash}`);
   console.log(`   price=$${Number(ethers.formatUnits(await lp.spotPrice(token), 18)).toPrecision(3)}\n`);
 
-  // --- 3. Sell ---
+  // --- 3. Sell (skip with NO_SELL=1 to buy and hold) ---
+  if (process.env.NO_SELL) {
+    console.log(`3) NO_SELL set — holding ${ethers.formatUnits(bought, 18)} ${params.symbol}. ✔ buy succeeded on-chain.`);
+    return;
+  }
   console.log(`3) selling it back…`);
   await (await tk.approve(lpAddr, bought)).wait();
   const stx = await lp.sell(token, bought, 0n, dl());
