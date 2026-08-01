@@ -5,9 +5,6 @@ import { LAUNCHPAD_ADDRESS, DEPLOY_BLOCK } from "./contracts";
 
 export const publicClient = createPublicClient({ chain: activeChain, transport: http() });
 
-const tokenLaunchedEvent = parseAbiItem(
-  "event TokenLaunched(address indexed token, address indexed creator, string name, string symbol, string logo, address pool, uint256 timestamp)"
-);
 const tradeEvent = parseAbiItem(
   "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 usdcAmount, uint256 tokenAmount, uint256 timestamp)"
 );
@@ -56,33 +53,78 @@ export type TradeRow = {
   txHash: string;
 };
 
-/** All launched tokens (newest-first) from TokenLaunched logs. */
+const ZERO = "0x0000000000000000000000000000000000000000" as Address;
+
+/**
+ * All launched tokens (newest-first), read from the launchpad's on-chain views
+ * (`tokenCount` + `getTokens`) plus each token's self-describing getters.
+ *
+ * This uses plain `eth_call`s instead of `eth_getLogs`, because the Arc RPC
+ * (reached through the Tor bridge) caps/So rejects wide log ranges — which made
+ * the log-based discovery return nothing. Views always work.
+ */
 export async function fetchTokenList(): Promise<TokenMeta[]> {
-  const logs = await publicClient.getLogs({
-    address: LAUNCHPAD_ADDRESS,
-    event: tokenLaunchedEvent,
-    fromBlock: DEPLOY_BLOCK,
-    toBlock: "latest",
-  });
-  const metas = logs.map((log) => {
-    const a = log.args;
-    return {
-      token: a.token as Address,
-      creator: a.creator as Address,
-      name: a.name ?? "",
-      symbol: a.symbol ?? "",
-      uri: a.logo ?? "",
-      pool: (a.pool as Address) ?? "0x0000000000000000000000000000000000000000",
-      description: "",
-      twitter: "",
-      telegram: "",
-      discord: "",
-      website: "",
-      farcaster: "",
-      createdAt: Number(a.timestamp ?? 0n),
-    } as TokenMeta;
-  });
-  return metas.reverse();
+  const count = (await publicClient.readContract({
+    ...launchpad,
+    functionName: "tokenCount",
+  })) as bigint;
+  if (count === 0n) return [];
+
+  // getTokens already returns newest-first.
+  const addresses = (await publicClient.readContract({
+    ...launchpad,
+    functionName: "getTokens",
+    args: [0n, count],
+  })) as readonly Address[];
+
+  const n = addresses.length;
+  const metas = await Promise.all(
+    addresses.map(async (token, i) => {
+      const meta: TokenMeta = {
+        token,
+        creator: ZERO,
+        name: "",
+        symbol: "",
+        uri: "",
+        pool: ZERO,
+        description: "",
+        twitter: "",
+        telegram: "",
+        discord: "",
+        website: "",
+        farcaster: "",
+        createdAt: n - i, // synthetic order key: newest (i=0) sorts highest
+      };
+      const read = (
+        functionName: "name" | "symbol" | "logo" | "liquidityPool" | "deployer" | "description" | "socials"
+      ) => publicClient.readContract({ address: token, abi: erc20Abi, functionName }).catch(() => undefined);
+      const [name, symbol, logo, pool, deployer, description, socials] = await Promise.all([
+        read("name"),
+        read("symbol"),
+        read("logo"),
+        read("liquidityPool"),
+        read("deployer"),
+        read("description"),
+        read("socials"),
+      ]);
+      meta.name = (name as string) ?? "";
+      meta.symbol = (symbol as string) ?? "";
+      meta.uri = (logo as string) ?? "";
+      meta.pool = (pool as Address) ?? ZERO;
+      meta.creator = (deployer as Address) ?? ZERO;
+      meta.description = (description as string) ?? "";
+      if (Array.isArray(socials)) {
+        const s = socials as readonly string[];
+        meta.twitter = s[0] ?? "";
+        meta.telegram = s[1] ?? "";
+        meta.discord = s[2] ?? "";
+        meta.website = s[3] ?? "";
+        meta.farcaster = s[4] ?? "";
+      }
+      return meta;
+    })
+  );
+  return metas;
 }
 
 /** Base list entry augmented with rich metadata read from the token itself. */

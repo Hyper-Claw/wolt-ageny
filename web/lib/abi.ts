@@ -139,7 +139,12 @@ export const erc20Abi = [
     ],
     outputs: [{ name: "", type: "bool" }],
   },
+  // Standard ERC-20 metadata.
+  { type: "function", name: "name", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "string" }] },
+  { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "string" }] },
+  { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint8" }] },
   // Self-describing token getters (Pons-compatible).
+  { type: "function", name: "logo", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "string" }] },
   { type: "function", name: "description", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "string" }] },
   { type: "function", name: "liquidityPool", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "address" }] },
   { type: "function", name: "deployer", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "address" }] },
