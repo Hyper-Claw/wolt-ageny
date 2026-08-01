@@ -10,6 +10,7 @@ import { activeChain } from "@/lib/chain";
 import { fmtCompact, fmtPrice, fmtUsdc, shortAddr } from "@/lib/format";
 import { TradePanel } from "@/components/TradePanel";
 import { TradesFeed } from "@/components/TradesFeed";
+import { CopyAddress } from "@/components/CopyAddress";
 
 export default function TokenPage() {
   const params = useParams<{ address: string }>();
@@ -58,19 +59,17 @@ export default function TokenPage() {
                 )}
               </div>
               <p className="mt-1 text-sm text-arc-muted">{meta?.description}</p>
+              <div className="mt-2">
+                <CopyAddress
+                  value={token}
+                  href={
+                    activeChain.blockExplorers
+                      ? `${activeChain.blockExplorers.default.url}/address/${token}`
+                      : undefined
+                  }
+                />
+              </div>
               <div className="mt-2 flex flex-wrap gap-3 text-xs">
-                {activeChain.blockExplorers ? (
-                  <a
-                    href={`${activeChain.blockExplorers.default.url}/address/${token}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-arc-accent hover:underline"
-                  >
-                    {shortAddr(token)}
-                  </a>
-                ) : (
-                  <span className="font-mono text-arc-muted">{shortAddr(token)}</span>
-                )}
                 {meta?.creator && <span className="text-arc-muted">creator {shortAddr(meta.creator)}</span>}
                 {meta?.twitter && <SocialLink href={meta.twitter} label="twitter" />}
                 {meta?.telegram && <SocialLink href={meta.telegram} label="telegram" />}

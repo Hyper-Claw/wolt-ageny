@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { decodeEventLog, type Address } from "viem";
 import { useAccount, useConnect, useWriteContract, useConfig } from "wagmi";
 import { injected } from "wagmi/connectors";
@@ -31,9 +31,29 @@ export default function CreatePage() {
   const [status, setStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [imgBusy, setImgBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function handleFile(file?: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Please choose an image file.");
+      return;
+    }
+    setError("");
+    setImgBusy(true);
+    try {
+      const uri = await compressToDataUri(file);
+      setForm((f) => ({ ...f, uri }));
+    } catch {
+      setError("Couldn't process that image — try a smaller/simpler one, or paste a URL below.");
+    } finally {
+      setImgBusy(false);
+    }
+  }
 
   const valid = form.name.trim().length > 0 && form.symbol.trim().length > 0;
 
@@ -115,7 +135,35 @@ export default function CreatePage() {
             maxLength={16}
           />
         </Field>
-        <Field label="Image URL" hint="https://… or data:image/… (shown on cards & the coin page)">
+        <Field label="Image" hint="Drop or click to upload — auto-resized & stored on-chain. Or paste a URL below.">
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleFile(e.dataTransfer.files?.[0]);
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-arc-border bg-black/20 p-3 hover:border-arc-accent"
+          >
+            {form.uri ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={form.uri} alt="preview" className="h-12 w-12 rounded object-cover" />
+            ) : (
+              <div className="grid h-12 w-12 place-items-center rounded bg-black/30 text-xl text-arc-muted">+</div>
+            )}
+            <span className="text-sm text-arc-muted">
+              {imgBusy ? "Processing…" : form.uri ? "Change image" : "Drop an image or click to upload"}
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+          </div>
+        </Field>
+        <Field label="…or Image URL" hint="https://… or data:image/…">
           <input className="input" placeholder="https://…/logo.png" value={form.uri} onChange={set("uri")} />
         </Field>
         <Field label="Description">
@@ -158,6 +206,33 @@ export default function CreatePage() {
       </form>
     </div>
   );
+}
+
+/**
+ * Resize + compress an image entirely in the browser into a small data: URI so
+ * it can be stored on-chain as the token's logo string. Steps down size/quality
+ * until it fits under an on-chain-friendly cap.
+ */
+async function compressToDataUri(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const MAX_LEN = 40000; // ~30KB — keeps launch gas + Explore reads reasonable
+  for (const size of [160, 128, 96, 64]) {
+    for (const q of [0.85, 0.7, 0.55, 0.4]) {
+      const scale = Math.min(1, size / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("no canvas context");
+      ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      const uri = canvas.toDataURL("image/webp", q);
+      if (uri.length <= MAX_LEN) return uri;
+    }
+  }
+  throw new Error("image too large after compression");
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
