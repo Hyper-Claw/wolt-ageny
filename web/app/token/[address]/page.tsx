@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAddress, isAddress, type Address } from "viem";
-import { fetchCurve, fetchTokenMeta } from "@/lib/reads";
+import { fetchTokenCached } from "@/lib/reads";
 import { activeChain } from "@/lib/chain";
 import { fmtCompact, fmtPrice, fmtUsdc, shortAddr } from "@/lib/format";
 import { TradePanel } from "@/components/TradePanel";
@@ -19,17 +19,15 @@ export default function TokenPage() {
   const token = (valid ? getAddress(raw) : "0x0000000000000000000000000000000000000000") as Address;
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const { data: meta } = useQuery({
-    queryKey: ["meta", token],
-    queryFn: () => fetchTokenMeta(token),
-    enabled: valid,
-  });
-  const { data: curve, refetch } = useQuery({
-    queryKey: ["curve", token, refreshKey],
-    queryFn: () => fetchCurve(token),
+  const { data, refetch } = useQuery({
+    queryKey: ["tokenFull", token, refreshKey],
+    queryFn: () => fetchTokenCached(token),
     enabled: valid,
     refetchInterval: 8_000,
+    placeholderData: (prev) => prev,
   });
+  const meta = data?.meta ?? undefined;
+  const curve = data?.curve ?? undefined;
 
   if (!valid) {
     return <p className="text-arc-muted">Invalid token address.</p>;
@@ -112,6 +110,14 @@ export default function TokenPage() {
               graduated={curve?.graduated ?? false}
               onTraded={async () => {
                 setRefreshKey((k) => k + 1);
+                try {
+                  await fetch("/api/revalidate", {
+                    method: "POST",
+                    body: JSON.stringify({ paths: [`/api/token/${token}`, "/api/tokens"] }),
+                  });
+                } catch {
+                  /* best-effort */
+                }
                 await refetch();
               }}
             />

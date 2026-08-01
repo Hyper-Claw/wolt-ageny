@@ -310,6 +310,91 @@ export async function fetchCurve(token: Address): Promise<CurveState> {
   };
 }
 
+export type TokenFull = { meta: TokenMeta | null; curve: CurveState | null };
+
+/**
+ * One token's full metadata + curve state in a SINGLE Multicall3 request
+ * (falls back to individual reads if Multicall3 is absent). Used by the cached
+ * /api/token/[address] route so the token page loads in one round-trip.
+ */
+export async function fetchTokenFull(token: Address): Promise<TokenFull> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contracts: any[] = [
+      { address: token, abi: erc20Abi, functionName: "name" },
+      { address: token, abi: erc20Abi, functionName: "symbol" },
+      { address: token, abi: erc20Abi, functionName: "logo" },
+      { address: token, abi: erc20Abi, functionName: "description" },
+      { address: token, abi: erc20Abi, functionName: "socials" },
+      { address: token, abi: erc20Abi, functionName: "deployer" },
+      { address: token, abi: erc20Abi, functionName: "liquidityPool" },
+      { ...launchpad, functionName: "spotPrice", args: [token] },
+      { ...launchpad, functionName: "marketCap", args: [token] },
+      { ...launchpad, functionName: "progressBps", args: [token] },
+      { ...launchpad, functionName: "graduationStatus", args: [token] },
+    ];
+    const r = await withRetry(() => publicClient.multicall({ contracts, allowFailure: true }));
+    const ok = (j: number) => (r[j]?.status === "success" ? r[j].result : undefined);
+    const s = (ok(4) as readonly string[]) ?? [];
+    const meta: TokenMeta = {
+      token,
+      name: (ok(0) as string) ?? "",
+      symbol: (ok(1) as string) ?? "",
+      uri: (ok(2) as string) ?? "",
+      description: (ok(3) as string) ?? "",
+      creator: (ok(5) as Address) ?? ZERO,
+      pool: (ok(6) as Address) ?? ZERO,
+      twitter: s[0] ?? "",
+      telegram: s[1] ?? "",
+      discord: s[2] ?? "",
+      website: s[3] ?? "",
+      farcaster: s[4] ?? "",
+      createdAt: 0,
+    };
+    if (meta.pool === ZERO && !meta.name) return { meta: null, curve: null };
+    const sp = ok(7) as bigint | undefined;
+    const grad = ok(10) as readonly [bigint, bigint, boolean] | undefined;
+    const curve: CurveState | null =
+      sp !== undefined && grad
+        ? {
+            spotPrice: sp,
+            marketCap: (ok(8) as bigint) ?? 0n,
+            progressBps: (ok(9) as bigint) ?? 0n,
+            principal: grad[0],
+            graduated: grad[2],
+          }
+        : null;
+    return { meta, curve };
+  } catch {
+    const meta = await fetchTokenMeta(token);
+    const curve = await fetchCurve(token).catch(() => null);
+    return { meta, curve };
+  }
+}
+
+/** Token page data via the cached /api/token/[address] endpoint. */
+export async function fetchTokenCached(token: Address): Promise<TokenFull> {
+  const res = await fetch(`/api/token/${token}`);
+  if (!res.ok) throw new Error("token endpoint failed");
+  const t = (await res.json()) as {
+    meta: TokenMeta | null;
+    curve: null | { spotPrice: string; marketCap: string; progressBps: string; principal: string; graduated: boolean };
+  };
+  if (!t?.meta) return { meta: null, curve: null };
+  return {
+    meta: t.meta,
+    curve: t.curve
+      ? {
+          spotPrice: BigInt(t.curve.spotPrice),
+          marketCap: BigInt(t.curve.marketCap),
+          progressBps: BigInt(t.curve.progressBps),
+          principal: BigInt(t.curve.principal),
+          graduated: t.curve.graduated,
+        }
+      : null,
+  };
+}
+
 // spotPrice is USDC-per-token scaled 1e18; USDC is 6-dec, token 18-dec.
 // tokensOut(18) = usdcIn(6) * 1e30 / spotPrice ; usdcOut(6) = tokenIn(18) * spotPrice / 1e30
 const SCALE = 10n ** 30n;
