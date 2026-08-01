@@ -59,10 +59,10 @@ export async function v3Addrs(v3: { usdc: any; factory: any; npm: any; router: a
 export const ECON = {
   poolFee: 10000,
   tickSpacing: 200,
-  tickLower: -414400,
-  tickUpper: -368400,
+  tickLower: -405400, // launch MC ~$2.5k
+  tickUpper: -380400, // graduation MC ~$30k (12.2x range)
   totalSupply: ethers.parseEther("1000000000"),
-  graduationThreshold: 9000n * 1_000_000n, // 9,000 USDC (6-dec)
+  graduationThreshold: 8658n * 1_000_000n, // ~$8.66k USDC = √(2.5k × 30k) to graduate
   protocolFeePercent: 50n,
   restrictionBlocks: 0n,
 };
