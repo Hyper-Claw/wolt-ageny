@@ -20,8 +20,11 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-arc-border bg-arc-bg/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-4">
-          <Link href="/" aria-label="Home">
-            <Logo size={30} />
+          <Link href="/" aria-label="Home" className="flex items-center gap-2">
+            <Logo size={40} />
+            <span className="hidden bg-arc-gradient bg-clip-text text-lg font-black tracking-tight text-transparent sm:inline">
+              LOOP
+            </span>
           </Link>
           <nav className="tabs">
             <Link href="/" className={`tab ${onExplore ? "tab-active" : ""}`}>

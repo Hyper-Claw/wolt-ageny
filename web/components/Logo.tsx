@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
  *
  * Drop your rope-L artwork at web/public/logo.png to use it.
  */
-const SOURCES = ["/logo.png", "/logo.svg"];
+const SOURCES = ["/logo.png", "/logo.avif", "/logo.webp", "/logo.jpg", "/logo.svg"];
 
 export function Logo({ size = 32 }: { size?: number }) {
   const [src, setSrc] = useState<string | null>(null);
