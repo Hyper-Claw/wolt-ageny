@@ -207,11 +207,88 @@ export async function fetchTokensCached(): Promise<TokenWithCurve[]> {
   }));
 }
 
+/** Just the launched token addresses (newest-first), via on-chain views. */
+async function fetchTokenAddresses(): Promise<Address[]> {
+  const count = (await gated(() =>
+    withRetry(() => publicClient.readContract({ ...launchpad, functionName: "tokenCount" }))
+  )) as bigint;
+  if (count === 0n) return [];
+  const addresses = (await gated(() =>
+    withRetry(() => publicClient.readContract({ ...launchpad, functionName: "getTokens", args: [0n, count] }))
+  )) as readonly Address[];
+  return [...addresses];
+}
+
+/**
+ * Fast path: one Multicall3 request returns every token's metadata + curve
+ * state in a single round-trip (huge over the slow Tor bridge). Throws if
+ * Multicall3 isn't available, so the caller can fall back.
+ */
+async function fetchViaMulticall(addresses: Address[]): Promise<TokenWithCurve[]> {
+  const PER = 9;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const contracts: any[] = [];
+  for (const token of addresses) {
+    contracts.push(
+      { address: token, abi: erc20Abi, functionName: "name" },
+      { address: token, abi: erc20Abi, functionName: "symbol" },
+      { address: token, abi: erc20Abi, functionName: "logo" },
+      { address: token, abi: erc20Abi, functionName: "liquidityPool" },
+      { address: token, abi: erc20Abi, functionName: "deployer" },
+      { ...launchpad, functionName: "spotPrice", args: [token] },
+      { ...launchpad, functionName: "marketCap", args: [token] },
+      { ...launchpad, functionName: "progressBps", args: [token] },
+      { ...launchpad, functionName: "graduationStatus", args: [token] }
+    );
+  }
+  const res = await withRetry(() => publicClient.multicall({ contracts, allowFailure: true }));
+  const n = addresses.length;
+  return addresses.map((token, i) => {
+    const base = i * PER;
+    const ok = (j: number) => (res[base + j]?.status === "success" ? res[base + j].result : undefined);
+    const meta: TokenMeta = {
+      token,
+      creator: (ok(4) as Address) ?? ZERO,
+      name: (ok(0) as string) ?? "",
+      symbol: (ok(1) as string) ?? "",
+      uri: (ok(2) as string) ?? "",
+      pool: (ok(3) as Address) ?? ZERO,
+      description: "",
+      twitter: "",
+      telegram: "",
+      discord: "",
+      website: "",
+      farcaster: "",
+      createdAt: n - i,
+    };
+    const sp = ok(5) as bigint | undefined;
+    const grad = ok(8) as readonly [bigint, bigint, boolean] | undefined;
+    const curve: CurveState | null =
+      sp !== undefined && grad
+        ? {
+            spotPrice: sp,
+            marketCap: (ok(6) as bigint) ?? 0n,
+            progressBps: (ok(7) as bigint) ?? 0n,
+            principal: grad[0],
+            graduated: grad[2],
+          }
+        : null;
+    return { meta, curve };
+  });
+}
+
 /** Every token with its live curve state (for the Explore grid). */
 export async function fetchTokensWithCurves(): Promise<TokenWithCurve[]> {
-  const metas = await fetchTokenList();
-  const curves = await Promise.all(metas.map((m) => fetchCurve(m.token).catch(() => null)));
-  return metas.map((meta, i) => ({ meta, curve: curves[i] }));
+  const addresses = await fetchTokenAddresses();
+  if (!addresses.length) return [];
+  try {
+    return await fetchViaMulticall(addresses); // one round-trip when Multicall3 exists
+  } catch {
+    // Multicall3 unavailable — fall back to per-token gated reads.
+    const metas = await fetchTokenList();
+    const curves = await Promise.all(metas.map((m) => fetchCurve(m.token).catch(() => null)));
+    return metas.map((meta, i) => ({ meta, curve: curves[i] }));
+  }
 }
 
 export async function fetchCurve(token: Address): Promise<CurveState> {

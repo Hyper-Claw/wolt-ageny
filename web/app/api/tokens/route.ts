@@ -7,6 +7,7 @@ import { fetchTokensWithCurves } from "@/lib/reads";
 // list immediately while a fresh one is fetched in the background.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export async function GET() {
   try {
@@ -16,7 +17,10 @@ export async function GET() {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "cache-control": "public, s-maxage=15, stale-while-revalidate=120",
+        // Serve instantly from cache; refresh often in the background so new
+        // launches appear within seconds, and serve stale for a long time so
+        // nobody ever waits on Tor. A launch also purges this via /api/revalidate.
+        "cache-control": "public, s-maxage=5, stale-while-revalidate=86400",
       },
     });
   } catch (e) {

@@ -103,6 +103,12 @@ export default function CreatePage() {
           /* not our event */
         }
       }
+      // Purge the cached token list so the new launch shows on Explore instantly.
+      try {
+        await fetch("/api/revalidate", { method: "POST" });
+      } catch {
+        /* best-effort — the list refreshes on its own within seconds anyway */
+      }
       if (token) router.push(`/token/${token}`);
       else router.push("/");
     } catch (err: unknown) {
