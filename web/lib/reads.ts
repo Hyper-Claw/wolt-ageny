@@ -5,6 +5,25 @@ import { LAUNCHPAD_ADDRESS, DEPLOY_BLOCK } from "./contracts";
 
 export const publicClient = createPublicClient({ chain: activeChain, transport: http() });
 
+/**
+ * Concurrency gate. The Arc RPC (reached over a single Tor circuit) rate-limits
+ * bursts with 429s — firing every token's reads at once made the Explore page
+ * hang and come back empty. This caps how many reads are in flight at a time so
+ * we stay under the limit instead of getting throttled to a halt.
+ */
+let inFlight = 0;
+const waiters: Array<() => void> = [];
+async function gated<T>(fn: () => Promise<T>, max = 6): Promise<T> {
+  if (inFlight >= max) await new Promise<void>((r) => waiters.push(r));
+  inFlight++;
+  try {
+    return await fn();
+  } finally {
+    inFlight--;
+    waiters.shift()?.();
+  }
+}
+
 const tradeEvent = parseAbiItem(
   "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 usdcAmount, uint256 tokenAmount, uint256 timestamp)"
 );
@@ -55,6 +74,20 @@ export type TradeRow = {
 
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 
+/** Retry a read a few times — the Tor-bridged RPC occasionally rate-limits (429). */
+async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * All launched tokens (newest-first), read from the launchpad's on-chain views
  * (`tokenCount` + `getTokens`) plus each token's self-describing getters.
@@ -64,18 +97,15 @@ const ZERO = "0x0000000000000000000000000000000000000000" as Address;
  * the log-based discovery return nothing. Views always work.
  */
 export async function fetchTokenList(): Promise<TokenMeta[]> {
-  const count = (await publicClient.readContract({
-    ...launchpad,
-    functionName: "tokenCount",
-  })) as bigint;
+  const count = (await gated(() =>
+    withRetry(() => publicClient.readContract({ ...launchpad, functionName: "tokenCount" }))
+  )) as bigint;
   if (count === 0n) return [];
 
   // getTokens already returns newest-first.
-  const addresses = (await publicClient.readContract({
-    ...launchpad,
-    functionName: "getTokens",
-    args: [0n, count],
-  })) as readonly Address[];
+  const addresses = (await gated(() =>
+    withRetry(() => publicClient.readContract({ ...launchpad, functionName: "getTokens", args: [0n, count] }))
+  )) as readonly Address[];
 
   const n = addresses.length;
   const metas = await Promise.all(
@@ -95,32 +125,24 @@ export async function fetchTokenList(): Promise<TokenMeta[]> {
         farcaster: "",
         createdAt: n - i, // synthetic order key: newest (i=0) sorts highest
       };
-      const read = (
-        functionName: "name" | "symbol" | "logo" | "liquidityPool" | "deployer" | "description" | "socials"
-      ) => publicClient.readContract({ address: token, abi: erc20Abi, functionName }).catch(() => undefined);
-      const [name, symbol, logo, pool, deployer, description, socials] = await Promise.all([
+      // Cards only need name/symbol/logo/pool/creator. description + socials are
+      // fetched on the token detail page (fetchTokenMeta), keeping this list light.
+      const read = (functionName: "name" | "symbol" | "logo" | "liquidityPool" | "deployer") =>
+        gated(() =>
+          withRetry(() => publicClient.readContract({ address: token, abi: erc20Abi, functionName }))
+        ).catch(() => undefined);
+      const [name, symbol, logo, pool, deployer] = await Promise.all([
         read("name"),
         read("symbol"),
         read("logo"),
         read("liquidityPool"),
         read("deployer"),
-        read("description"),
-        read("socials"),
       ]);
       meta.name = (name as string) ?? "";
       meta.symbol = (symbol as string) ?? "";
       meta.uri = (logo as string) ?? "";
       meta.pool = (pool as Address) ?? ZERO;
       meta.creator = (deployer as Address) ?? ZERO;
-      meta.description = (description as string) ?? "";
-      if (Array.isArray(socials)) {
-        const s = socials as readonly string[];
-        meta.twitter = s[0] ?? "";
-        meta.telegram = s[1] ?? "";
-        meta.discord = s[2] ?? "";
-        meta.website = s[3] ?? "";
-        meta.farcaster = s[4] ?? "";
-      }
       return meta;
     })
   );
@@ -134,8 +156,8 @@ export async function fetchTokenMeta(token: Address): Promise<TokenMeta | null> 
   if (!base) return null;
   try {
     const [description, socials] = await Promise.all([
-      publicClient.readContract({ address: token, abi: erc20Abi, functionName: "description" }),
-      publicClient.readContract({ address: token, abi: erc20Abi, functionName: "socials" }),
+      gated(() => withRetry(() => publicClient.readContract({ address: token, abi: erc20Abi, functionName: "description" }))),
+      gated(() => withRetry(() => publicClient.readContract({ address: token, abi: erc20Abi, functionName: "socials" }))),
     ]);
     const s = socials as readonly [string, string, string, string, string];
     return {
@@ -162,11 +184,13 @@ export async function fetchTokensWithCurves(): Promise<TokenWithCurve[]> {
 }
 
 export async function fetchCurve(token: Address): Promise<CurveState> {
+  const call = (functionName: "spotPrice" | "marketCap" | "progressBps" | "graduationStatus") =>
+    gated(() => withRetry(() => publicClient.readContract({ ...launchpad, functionName, args: [token] })));
   const [spotPrice, marketCap, progressBps, grad] = await Promise.all([
-    publicClient.readContract({ ...launchpad, functionName: "spotPrice", args: [token] }),
-    publicClient.readContract({ ...launchpad, functionName: "marketCap", args: [token] }),
-    publicClient.readContract({ ...launchpad, functionName: "progressBps", args: [token] }),
-    publicClient.readContract({ ...launchpad, functionName: "graduationStatus", args: [token] }),
+    call("spotPrice"),
+    call("marketCap"),
+    call("progressBps"),
+    call("graduationStatus"),
   ]);
   const g = grad as readonly [bigint, bigint, boolean];
   return {

@@ -25,6 +25,9 @@ export const arcTestnet = defineChain({
       url: process.env.NEXT_PUBLIC_ARC_EXPLORER ?? "https://testnet.arcscan.app",
     },
   },
+  contracts: {
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" },
+  },
   testnet: true,
 });
 
@@ -55,6 +58,9 @@ export const arcMainnet = defineChain({
   },
   blockExplorers: {
     default: { name: "Arcscan", url: process.env.NEXT_PUBLIC_ARC_EXPLORER ?? "https://arc.exploreme.pro" },
+  },
+  contracts: {
+    multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" },
   },
 });
 

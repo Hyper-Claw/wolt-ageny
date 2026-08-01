@@ -21,7 +21,10 @@ export default function ExplorePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["tokensFull"],
     queryFn: fetchTokensWithCurves,
-    refetchInterval: 15_000,
+    refetchInterval: 20_000,
+    staleTime: 15_000,
+    retry: 3,
+    placeholderData: (prev) => prev, // keep showing tokens while refetching
     enabled: isConfigured,
   });
 
