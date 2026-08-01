@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchTokensWithCurves, type TokenWithCurve } from "@/lib/reads";
+import { fetchTokensCached, type TokenWithCurve } from "@/lib/reads";
 import { isConfigured } from "@/lib/contracts";
 import { TokenCard } from "@/components/TokenCard";
 import { ConfigBanner } from "@/components/ConfigBanner";
@@ -20,7 +20,7 @@ export default function ExplorePage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["tokensFull"],
-    queryFn: fetchTokensWithCurves,
+    queryFn: fetchTokensCached,
     refetchInterval: 20_000,
     staleTime: 15_000,
     retry: 3,

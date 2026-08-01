@@ -176,6 +176,37 @@ export async function fetchTokenMeta(token: Address): Promise<TokenMeta | null> 
 
 export type TokenWithCurve = { meta: TokenMeta; curve: CurveState | null };
 
+/**
+ * Explore-grid data via the cached /api/tokens endpoint (server does the slow
+ * Tor reads once; the CDN serves everyone instantly). Bigints arrive as strings.
+ */
+export async function fetchTokensCached(): Promise<TokenWithCurve[]> {
+  const res = await fetch("/api/tokens");
+  if (!res.ok) throw new Error("tokens endpoint failed");
+  const raw = (await res.json()) as Array<{
+    meta: TokenMeta;
+    curve: null | {
+      spotPrice: string;
+      marketCap: string;
+      progressBps: string;
+      principal: string;
+      graduated: boolean;
+    };
+  }>;
+  return raw.map((t) => ({
+    meta: t.meta,
+    curve: t.curve
+      ? {
+          spotPrice: BigInt(t.curve.spotPrice),
+          marketCap: BigInt(t.curve.marketCap),
+          progressBps: BigInt(t.curve.progressBps),
+          principal: BigInt(t.curve.principal),
+          graduated: t.curve.graduated,
+        }
+      : null,
+  }));
+}
+
 /** Every token with its live curve state (for the Explore grid). */
 export async function fetchTokensWithCurves(): Promise<TokenWithCurve[]> {
   const metas = await fetchTokenList();

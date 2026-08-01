@@ -21,7 +21,8 @@ if (!ONION_RPC) {
 const target = new URL(ONION_RPC);
 const isHttps = target.protocol === "https:";
 const transport = isHttps ? https : http;
-const agent = new SocksProxyAgent(TOR_SOCKS);
+// keepAlive reuses Tor streams instead of paying circuit setup on every request.
+const agent = new SocksProxyAgent(TOR_SOCKS, { keepAlive: true, maxSockets: 8, timeout: 45000 });
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
