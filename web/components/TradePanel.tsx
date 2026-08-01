@@ -185,15 +185,24 @@ export function TradePanel({
         onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
       />
 
-      {mode === "buy" && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {["1", "5", "25", "100"].map((v) => (
-            <button key={v} onClick={() => setAmount(v)} className="btn-ghost px-2 py-1 text-xs">
-              ${v}
-            </button>
-          ))}
-        </div>
-      )}
+      {(() => {
+        const bal = mode === "buy" ? (usdcBal as bigint | undefined) : (tokenBal as bigint | undefined);
+        const dec = mode === "buy" ? usdcDecimals : 18;
+        if (bal == null || bal === 0n) return null;
+        return (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {[25, 50, 75, 100].map((pct) => (
+              <button
+                key={pct}
+                onClick={() => setAmount(formatUnits((bal * BigInt(pct)) / 100n, dec))}
+                className="btn-ghost flex-1 px-2 py-1 text-xs"
+              >
+                {pct === 100 ? "MAX" : `${pct}%`}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       <div className="mb-4 rounded-lg bg-arc-bg p-3 text-sm">
         <div className="flex justify-between">

@@ -59,15 +59,27 @@ export default function TokenPage() {
                 )}
               </div>
               <p className="mt-1 text-sm text-arc-muted">{meta?.description}</p>
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <CopyAddress
                   value={token}
+                  label="Contract"
                   href={
                     activeChain.blockExplorers
                       ? `${activeChain.blockExplorers.default.url}/address/${token}`
                       : undefined
                   }
                 />
+                {meta?.pool && meta.pool !== "0x0000000000000000000000000000000000000000" && (
+                  <CopyAddress
+                    value={meta.pool}
+                    label="Pool"
+                    href={
+                      activeChain.blockExplorers
+                        ? `${activeChain.blockExplorers.default.url}/address/${meta.pool}`
+                        : undefined
+                    }
+                  />
+                )}
               </div>
               <div className="mt-2 flex flex-wrap gap-3 text-xs">
                 {meta?.creator && <span className="text-arc-muted">creator {shortAddr(meta.creator)}</span>}
