@@ -12,6 +12,7 @@
     "deploy:arc-testnet": "hardhat run scripts/deploy.ts --network arcTestnet",
     "deploy:arc-mainnet": "hardhat run scripts/deploy.ts --network arcMainnet",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy-multicall:arc-mainnet": "hardhat run scripts/deploy-multicall.ts --network arcMainnet",
     "launch-trade:arc-mainnet": "hardhat run scripts/launch-and-trade.ts --network arcMainnet",
     "launch-trade:arc-testnet": "hardhat run scripts/launch-and-trade.ts --network arcTestnet",
     "seed:local": "hardhat run scripts/seed.ts --network localhost",

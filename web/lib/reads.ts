@@ -5,6 +5,11 @@ import { LAUNCHPAD_ADDRESS, DEPLOY_BLOCK } from "./contracts";
 
 export const publicClient = createPublicClient({ chain: activeChain, transport: http() });
 
+// Multicall3 is only used when NEXT_PUBLIC_MULTICALL3 is set (i.e. we've
+// deployed/confirmed one on Arc). Otherwise we read directly — trying to route
+// through a non-existent contract stalls every call.
+const HAS_MULTICALL = !!process.env.NEXT_PUBLIC_MULTICALL3;
+
 /**
  * Concurrency gate. The Arc RPC (reached over a single Tor circuit) rate-limits
  * bursts with 429s — firing every token's reads at once made the Explore page
@@ -281,14 +286,16 @@ async function fetchViaMulticall(addresses: Address[]): Promise<TokenWithCurve[]
 export async function fetchTokensWithCurves(): Promise<TokenWithCurve[]> {
   const addresses = await fetchTokenAddresses();
   if (!addresses.length) return [];
-  try {
-    return await fetchViaMulticall(addresses); // one round-trip when Multicall3 exists
-  } catch {
-    // Multicall3 unavailable — fall back to per-token gated reads.
-    const metas = await fetchTokenList();
-    const curves = await Promise.all(metas.map((m) => fetchCurve(m.token).catch(() => null)));
-    return metas.map((meta, i) => ({ meta, curve: curves[i] }));
+  if (HAS_MULTICALL) {
+    try {
+      return await fetchViaMulticall(addresses); // one round-trip when Multicall3 exists
+    } catch {
+      /* fall through to direct reads */
+    }
   }
+  const metas = await fetchTokenList();
+  const curves = await Promise.all(metas.map((m) => fetchCurve(m.token).catch(() => null)));
+  return metas.map((meta, i) => ({ meta, curve: curves[i] }));
 }
 
 export async function fetchCurve(token: Address): Promise<CurveState> {
@@ -318,6 +325,7 @@ export type TokenFull = { meta: TokenMeta | null; curve: CurveState | null };
  * /api/token/[address] route so the token page loads in one round-trip.
  */
 export async function fetchTokenFull(token: Address): Promise<TokenFull> {
+  if (!HAS_MULTICALL) return fetchTokenLean(token);
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contracts: any[] = [
@@ -366,10 +374,62 @@ export async function fetchTokenFull(token: Address): Promise<TokenFull> {
         : null;
     return { meta, curve };
   } catch {
-    const meta = await fetchTokenMeta(token);
-    const curve = await fetchCurve(token).catch(() => null);
-    return { meta, curve };
+    return fetchTokenLean(token);
   }
+}
+
+/** One token's meta + curve via direct reads (no Multicall3, no full-list scan). */
+async function fetchTokenLean(token: Address): Promise<TokenFull> {
+  const readT = (fn: "name" | "symbol" | "logo" | "description" | "socials" | "deployer" | "liquidityPool") =>
+    gated(() => withRetry(() => publicClient.readContract({ address: token, abi: erc20Abi, functionName: fn }))).catch(
+      () => undefined
+    );
+  const readL = (fn: "spotPrice" | "marketCap" | "progressBps" | "graduationStatus") =>
+    gated(() => withRetry(() => publicClient.readContract({ ...launchpad, functionName: fn, args: [token] }))).catch(
+      () => undefined
+    );
+  const [name, symbol, logo, description, socials, deployer, pool, sp, mc, pb, grad] = await Promise.all([
+    readT("name"),
+    readT("symbol"),
+    readT("logo"),
+    readT("description"),
+    readT("socials"),
+    readT("deployer"),
+    readT("liquidityPool"),
+    readL("spotPrice"),
+    readL("marketCap"),
+    readL("progressBps"),
+    readL("graduationStatus"),
+  ]);
+  const s = (socials as readonly string[]) ?? [];
+  const meta: TokenMeta = {
+    token,
+    name: (name as string) ?? "",
+    symbol: (symbol as string) ?? "",
+    uri: (logo as string) ?? "",
+    description: (description as string) ?? "",
+    creator: (deployer as Address) ?? ZERO,
+    pool: (pool as Address) ?? ZERO,
+    twitter: s[0] ?? "",
+    telegram: s[1] ?? "",
+    discord: s[2] ?? "",
+    website: s[3] ?? "",
+    farcaster: s[4] ?? "",
+    createdAt: 0,
+  };
+  if (meta.pool === ZERO && !meta.name) return { meta: null, curve: null };
+  const g = grad as readonly [bigint, bigint, boolean] | undefined;
+  const curve: CurveState | null =
+    sp !== undefined && g
+      ? {
+          spotPrice: sp as bigint,
+          marketCap: (mc as bigint) ?? 0n,
+          progressBps: (pb as bigint) ?? 0n,
+          principal: g[0],
+          graduated: g[2],
+        }
+      : null;
+  return { meta, curve };
 }
 
 /** Token page data via the cached /api/token/[address] endpoint. */
