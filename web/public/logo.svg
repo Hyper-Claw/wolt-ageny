@@ -1,25 +1,45 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="rope L logo">
   <defs>
-    <linearGradient id="rope" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4d7cff" />
-      <stop offset="1" stop-color="#9b5cff" />
+    <!-- electric blue -> violet, running down the whole mark -->
+    <linearGradient id="ropeGrad" x1="0" y1="6" x2="0" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3b6bff" />
+      <stop offset="0.55" stop-color="#6a45ff" />
+      <stop offset="1" stop-color="#a63cff" />
     </linearGradient>
+
+    <!-- twisted-strand texture: diagonal colored strand + dark groove + fiber highlight -->
+    <pattern id="twist" width="7.5" height="7.5" patternUnits="userSpaceOnUse" patternTransform="rotate(57)">
+      <rect width="7.5" height="7.5" fill="#0b0e19" />
+      <rect x="0" width="4.1" height="7.5" fill="url(#ropeGrad)" />
+      <rect x="3.5" width="1.0" height="7.5" fill="#04060c" opacity="0.75" />
+      <rect x="0.5" width="1.1" height="7.5" fill="#ffffff" opacity="0.20" />
+    </pattern>
+
+    <!-- the L shape as a thick rounded stroke, used to mask the rope texture -->
+    <mask id="lMask">
+      <rect width="64" height="64" fill="black" />
+      <path d="M22 12 V44 H46" stroke="white" stroke-width="12.5"
+            fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    </mask>
+
+    <!-- thin dark outline so the rope reads against the tile -->
+    <mask id="edgeMask">
+      <path d="M22 12 V44 H46" stroke="white" stroke-width="12.5" fill="none"
+            stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M22 12 V44 H46" stroke="black" stroke-width="9.5" fill="none"
+            stroke-linecap="round" stroke-linejoin="round" />
+    </mask>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#0a0a10" />
-  <path
-    d="M22 14 V44 H46"
-    stroke="url(#rope)"
-    stroke-width="9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-  <path
-    d="M22 14 V44 H46"
-    stroke="#ffffff"
-    stroke-opacity="0.18"
-    stroke-width="9"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    stroke-dasharray="3 5"
-  />
+
+  <!-- dark rounded tile, matches the on-black brand -->
+  <rect width="64" height="64" rx="14" fill="#07080d" />
+
+  <!-- rope body -->
+  <g mask="url(#lMask)">
+    <rect width="64" height="64" fill="#10131f" />
+    <rect width="64" height="64" fill="url(#twist)" />
+  </g>
+
+  <!-- crisp edge on the rope for definition -->
+  <rect width="64" height="64" fill="#000000" fill-opacity="0.55" mask="url(#edgeMask)" />
 </svg>
